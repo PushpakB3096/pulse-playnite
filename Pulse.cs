@@ -15,6 +15,7 @@ namespace Pulse
     {
         private static readonly ILogger logger = LogManager.GetLogger();
         private readonly IDialogsFactory dialogs;
+        private readonly PulseAccountClient client;
 
         private PulseSettingsViewModel settings { get; set; }
 
@@ -23,12 +24,11 @@ namespace Pulse
         public Pulse(IPlayniteAPI api) : base(api)
         {
             dialogs = api.Dialogs;
-
-            logger.Info("Pulse: constructor executed."); // may or may not show, don't care for now
+            client = new PulseAccountClient(api);
 
             Properties = new GenericPluginProperties
             {
-                HasSettings = false // change to true later when you add settings
+                HasSettings = false // we'll flip this when we add real settings
             };
         }
 
@@ -36,28 +36,28 @@ namespace Pulse
         {
             yield return new MainMenuItem
             {
-                Description = "Pulse: Sync all games (test)",
-                Action = _ => SyncAllGamesTest()
+                Description = "Pulse: Sync all games",
+                Action = _ => SyncAllGames()
             };
         }
 
-        private void SyncAllGamesTest()
+        private void SyncAllGames()
         {
             try
             {
-                // Get all games from Playnite DB
                 List<Game> allGames = PlayniteApi.Database.Games.ToList();
 
-                // For now, just show how many games we *would* sync
-                string message = $"Pulse test:\nFound {allGames.Count} games to sync.\n\nLater this will call the backend.";
-                dialogs.ShowMessage(message, "Pulse");
+                // Show quick info before network call
+                dialogs.ShowMessage($"Pulse: Syncing {allGames.Count} games to backend...", "Pulse");
 
-                // Also log it
-                logger.Info($"Pulse: SyncAllGamesTest invoked, {allGames.Count} games found.");
+                // Block on async call in this context
+                client.SyncGamesAsync(allGames).GetAwaiter().GetResult();
+
+                dialogs.ShowMessage("Pulse: Sync complete.", "Pulse");
             }
             catch (Exception ex)
             {
-                logger.Error(ex, "Pulse: SyncAllGamesTest failed.");
+                logger.Error(ex, "Pulse: SyncAllGames failed.");
                 dialogs.ShowErrorMessage("Pulse: Sync all games failed.\n" + ex.Message, "Pulse");
             }
         }
