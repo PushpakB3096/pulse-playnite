@@ -25,8 +25,38 @@ namespace Pulse
             settings = new PulseSettingsViewModel(this);
             Properties = new GenericPluginProperties
             {
-                HasSettings = true
+                HasSettings = false
             };
+        }
+
+         public override IEnumerable<MainMenuItem> GetMainMenuItems(GetMainMenuItemsArgs args)
+        {
+            yield return new MainMenuItem
+            {
+                Description = "Pulse: Sync all games (test)",
+                Action = _ => SyncAllGamesTest()
+            };
+        }
+
+        private void SyncAllGamesTest()
+        {
+            try
+            {
+                // Get all games from Playnite DB
+                List<Game> allGames = PlayniteApi.Database.Games.ToList();
+
+                // For now, just show how many games we *would* sync
+                string message = $"Pulse test:\nFound {allGames.Count} games to sync.\n\nLater this will call the backend.";
+                dialogs.ShowMessage(message, "Pulse");
+
+                // Also log it
+                logger.Info($"Pulse: SyncAllGamesTest invoked, {allGames.Count} games found.");
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Pulse: SyncAllGamesTest failed.");
+                dialogs.ShowErrorMessage("Pulse: Sync all games failed.\n" + ex.Message, "Pulse");
+            }
         }
 
         public override void OnGameInstalled(OnGameInstalledEventArgs args)
