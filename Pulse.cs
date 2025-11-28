@@ -14,6 +14,7 @@ namespace Pulse
     public class Pulse : GenericPlugin
     {
         private static readonly ILogger logger = LogManager.GetLogger();
+        private readonly IDialogsFactory dialogs;
 
         private PulseSettingsViewModel settings { get; set; }
 
@@ -21,11 +22,13 @@ namespace Pulse
 
         public Pulse(IPlayniteAPI api) : base(api)
         {
-            logger.Info("### PULSE TEST: Plugin constructor executed ###");
-            settings = new PulseSettingsViewModel(this);
+            dialogs = api.Dialogs;
+
+            logger.Info("Pulse: constructor executed."); // may or may not show, don't care for now
+
             Properties = new GenericPluginProperties
             {
-                HasSettings = false
+                HasSettings = false // change to true later when you add settings
             };
         }
 
