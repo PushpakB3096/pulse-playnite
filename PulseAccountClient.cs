@@ -87,7 +87,7 @@ namespace Pulse
                 Tags = game.Tags?.Select(t => t.Name).ToList() ?? new List<string>(),
                 Platform = game.Platforms?.FirstOrDefault()?.Name ?? "PC",
                 Source = game.Source?.Name ?? "Unknown",
-                TotalPlaytimeMinutes = (int)game.Playtime,       // Playnite's Playtime is minutes
+                TotalPlaytimeMinutes = (int)(game.Playtime / 60.0)       // Playnite's Playtime is in seconds
                 LastPlayedAt = game.LastActivity
             };
         }
