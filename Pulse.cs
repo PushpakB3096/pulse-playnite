@@ -21,6 +21,7 @@ namespace Pulse
 
         public Pulse(IPlayniteAPI api) : base(api)
         {
+            logger.Info("### PULSE TEST: Plugin constructor executed ###");
             settings = new PulseSettingsViewModel(this);
             Properties = new GenericPluginProperties
             {
