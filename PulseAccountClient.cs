@@ -118,6 +118,7 @@ public class PulseAccountClient
         {
             PlayniteId = game.Id.ToString(),
             Name = game.Name,
+            Description = game.Description,
             CoverImageDbPath = game.CoverImage,
 
             CoverSha1 = cover != null ? cover.Sha1 : null,
@@ -247,6 +248,9 @@ public class PulseAccountClient
 
         [JsonProperty("name")]
         public string Name { get; set; }
+
+        [JsonProperty("description")]
+        public string Description { get; set; }
 
         [JsonProperty("coverImageDbPath")]
         public string CoverImageDbPath { get; set; }
