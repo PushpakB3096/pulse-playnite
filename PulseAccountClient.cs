@@ -144,9 +144,7 @@ public class PulseAccountClient
             IsLaunching = game.IsLaunching,
             IsInstalling = game.IsInstalling,
             IsUninstalling = game.IsUninstalling,
-            OverrideInstallState = game.OverrideInstallState,
             IncludeLibraryPluginAction = game.IncludeLibraryPluginAction,
-            EnableSystemHdr = game.EnableSystemHdr,
             IsCustomGame = game.IsCustomGame,
 
             Added = game.Added,
@@ -158,17 +156,14 @@ public class PulseAccountClient
                     Year = rd.Value.Year,
                     Month = rd.Value.Month,
                     Day = rd.Value.Day,
-                    Date = rd.Value.Date
                 }
                 : null,
-            LastSizeScanDate = game.LastSizeScanDate,
 
             TotalPlaytimeSeconds = game.Playtime,
             TotalPlaytimeMinutes = (int)Math.Round(game.Playtime / 60.0),
             PlayCount = game.PlayCount,
 
             InstallDirectory = game.InstallDirectory,
-            InstallSizeBytes = game.InstallSize,
 
             UserScore = game.UserScore,
             CommunityScore = game.CommunityScore,
@@ -212,8 +207,7 @@ public class PulseAccountClient
                 WorkingDir = a.WorkingDir,
                 Type = (int)a.Type,
                 IsPlayAction = a.IsPlayAction,
-                EmulatorId = a.EmulatorId != Guid.Empty ? a.EmulatorId.ToString() : null,
-                EmulatorProfileId = a.EmulatorProfileId
+                EmulatorId = a.EmulatorId != Guid.Empty ? a.EmulatorId.ToString() : null
             }).ToList() ?? new List<GameActionDto>(),
 
             PreScript = game.PreScript,
