@@ -1,12 +1,10 @@
-﻿using Playnite.SDK;
+using Playnite.SDK;
 using Playnite.SDK.Events;
 using Playnite.SDK.Models;
 using Playnite.SDK.Plugins;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Controls;
 
 namespace Pulse
@@ -17,7 +15,11 @@ namespace Pulse
         private readonly IDialogsFactory dialogs;
         private readonly PulseAccountClient client;
 
-        private PulseSettingsViewModel settings { get; set; }
+        private readonly PulseSettingsViewModel settings;
+        private readonly List<Guid> gameIdsToUpdate = new List<Guid>();
+        private readonly List<Guid> gameIdsToRemove = new List<Guid>();
+        private readonly object syncQueueLock = new object();
+        private readonly System.Timers.Timer syncTimer;
 
         public override Guid Id { get; } = Guid.Parse("d1ac11bf-1668-455f-ad91-6fdb334a54c5");
 
@@ -25,14 +27,22 @@ namespace Pulse
         {
             dialogs = api.Dialogs;
             client = new PulseAccountClient(api);
+            settings = new PulseSettingsViewModel(this);
+
+            PlayniteApi.Database.Games.ItemUpdated += Games_ItemUpdated;
+            PlayniteApi.Database.Games.ItemCollectionChanged += Games_ItemCollectionChanged;
+
+            syncTimer = new System.Timers.Timer(5000);
+            syncTimer.AutoReset = false;
+            syncTimer.Elapsed += (_, __) => FlushPendingSyncQueues();
 
             Properties = new GenericPluginProperties
             {
-                HasSettings = false // we'll flip this when we add real settings
+                HasSettings = true
             };
         }
 
-         public override IEnumerable<MainMenuItem> GetMainMenuItems(GetMainMenuItemsArgs args)
+        public override IEnumerable<MainMenuItem> GetMainMenuItems(GetMainMenuItemsArgs args)
         {
             yield return new MainMenuItem
             {
@@ -47,10 +57,8 @@ namespace Pulse
             {
                 List<Game> allGames = PlayniteApi.Database.Games.ToList();
 
-                // Show quick info before network call
                 dialogs.ShowMessage($"Pulse: Syncing {allGames.Count} games to backend...", "Pulse");
 
-                // Block on async call in this context
                 client.SyncGamesAsync(allGames).GetAwaiter().GetResult();
 
                 dialogs.ShowMessage("Pulse: Sync complete.", "Pulse");
@@ -62,44 +70,163 @@ namespace Pulse
             }
         }
 
+        private void Games_ItemUpdated(object sender, ItemUpdatedEventArgs<Game> args)
+        {
+            if (!settings.Settings.AutoSyncLibrary)
+            {
+                return;
+            }
+
+            if (args.UpdatedItems == null || args.UpdatedItems.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var item in args.UpdatedItems)
+            {
+                var game = item.NewData;
+                if (game != null)
+                {
+                    lock (syncQueueLock)
+                    {
+                        gameIdsToUpdate.Add(game.Id);
+                    }
+                }
+            }
+
+            RestartSyncTimer();
+        }
+
+        private void Games_ItemCollectionChanged(object sender, ItemCollectionChangedEventArgs<Game> args)
+        {
+            if (!settings.Settings.AutoSyncLibrary)
+            {
+                return;
+            }
+
+            if (args.AddedItems != null && args.AddedItems.Count > 0)
+            {
+                lock (syncQueueLock)
+                {
+                    foreach (var g in args.AddedItems)
+                    {
+                        if (g != null)
+                        {
+                            gameIdsToUpdate.Add(g.Id);
+                        }
+                    }
+                }
+            }
+
+            if (args.RemovedItems != null && args.RemovedItems.Count > 0)
+            {
+                lock (syncQueueLock)
+                {
+                    foreach (var g in args.RemovedItems)
+                    {
+                        if (g != null)
+                        {
+                            gameIdsToRemove.Add(g.Id);
+                        }
+                    }
+                }
+            }
+
+            RestartSyncTimer();
+        }
+
+        private void RestartSyncTimer()
+        {
+            syncTimer.Stop();
+            syncTimer.Start();
+        }
+
+        private void FlushPendingSyncQueues()
+        {
+            syncTimer.Stop();
+
+            List<Guid> toRemove;
+            List<Guid> toUpdate;
+
+            lock (syncQueueLock)
+            {
+                toRemove = gameIdsToRemove.Distinct().ToList();
+                gameIdsToRemove.Clear();
+                toUpdate = gameIdsToUpdate.Distinct().ToList();
+                gameIdsToUpdate.Clear();
+            }
+
+            if (!settings.Settings.AutoSyncLibrary)
+            {
+                return;
+            }
+
+            var removedSet = new HashSet<Guid>(toRemove);
+            toUpdate = toUpdate.Where(id => !removedSet.Contains(id)).ToList();
+
+            try
+            {
+                if (toRemove.Count > 0)
+                {
+                    var playniteIds = toRemove.Select(id => id.ToString()).ToList();
+                    client.DeleteGamesByPlayniteIdsAsync(playniteIds).GetAwaiter().GetResult();
+                }
+
+                if (toUpdate.Count > 0)
+                {
+                    var games = new List<Game>();
+                    foreach (var id in toUpdate)
+                    {
+                        var g = PlayniteApi.Database.Games.Get(id);
+                        if (g != null)
+                        {
+                            games.Add(g);
+                        }
+                    }
+
+                    if (games.Count > 0)
+                    {
+                        client.SyncGamesAsync(games).GetAwaiter().GetResult();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Pulse: background library sync failed.");
+            }
+        }
+
         public override void OnGameInstalled(OnGameInstalledEventArgs args)
         {
-            // Add code to be executed when game is finished installing.
         }
 
         public override void OnGameStarted(OnGameStartedEventArgs args)
         {
-            // Add code to be executed when game is started running.
         }
 
         public override void OnGameStarting(OnGameStartingEventArgs args)
         {
-            // Add code to be executed when game is preparing to be started.
         }
 
         public override void OnGameStopped(OnGameStoppedEventArgs args)
         {
-            // Add code to be executed when game is preparing to be started.
         }
 
         public override void OnGameUninstalled(OnGameUninstalledEventArgs args)
         {
-            // Add code to be executed when game is uninstalled.
         }
 
         public override void OnApplicationStarted(OnApplicationStartedEventArgs args)
         {
-            // Add code to be executed when Playnite is initialized.
         }
 
         public override void OnApplicationStopped(OnApplicationStoppedEventArgs args)
         {
-            // Add code to be executed when Playnite is shutting down.
+            FlushPendingSyncQueues();
         }
 
         public override void OnLibraryUpdated(OnLibraryUpdatedEventArgs args)
         {
-            // Add code to be executed when library is updated.
         }
 
         public override ISettings GetSettings(bool firstRunSettings)
@@ -109,7 +236,9 @@ namespace Pulse
 
         public override UserControl GetSettingsView(bool firstRunSettings)
         {
-            return new PulseSettingsView();
+            var view = new PulseSettingsView();
+            view.DataContext = settings;
+            return view;
         }
     }
 }

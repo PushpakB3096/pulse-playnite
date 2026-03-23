@@ -1,14 +1,14 @@
-﻿<UserControl x:Class="Pulse.PulseSettingsView"
+<UserControl x:Class="Pulse.PulseSettingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
              d:DesignHeight="400" d:DesignWidth="600">
-    <StackPanel>
-        <TextBlock Text="Description for Option1:"/>
-        <TextBox Text="{Binding Settings.Option1}"/>
-        <TextBlock Text="Description for Option2:"/>
-        <CheckBox IsChecked="{Binding Settings.Option2}"/>
+    <StackPanel Margin="8">
+        <CheckBox Content="Automatically sync library changes to Pulse (playtime, new games, removals)"
+                  IsChecked="{Binding Settings.AutoSyncLibrary}"/>
+        <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="Gray"
+                   Text="When enabled, Pulse syncs after Playnite updates your library. You can still use Pulse: Sync all games from the main menu."/>
     </StackPanel>
 </UserControl>

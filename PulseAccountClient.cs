@@ -19,6 +19,7 @@ public class PulseAccountClient
     private static readonly HttpClient http = new HttpClient();
 
     private readonly string gamesSyncEndpoint;
+    private readonly string gamesByPlayniteDeletePrefix;
 
     public PulseAccountClient(IPlayniteAPI api)
     {
@@ -27,6 +28,54 @@ public class PulseAccountClient
 
         var baseUrlClean = BASE_URL.TrimEnd('/');
         gamesSyncEndpoint = baseUrlClean + "/api/games/sync";
+        gamesByPlayniteDeletePrefix = baseUrlClean + "/api/games/by-playnite/";
+    }
+
+    public async Task DeleteGamesByPlayniteIdsAsync(IEnumerable<string> playniteIds)
+    {
+        var ids = playniteIds != null
+            ? playniteIds.Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id.Trim()).Distinct().ToList()
+            : new List<string>();
+
+        if (ids.Count == 0)
+        {
+            logger.Info("Pulse: DeleteGamesByPlayniteIdsAsync called with 0 ids.");
+            return;
+        }
+
+        foreach (var id in ids)
+        {
+            var url = gamesByPlayniteDeletePrefix + Uri.EscapeDataString(id);
+            var req = new HttpRequestMessage(HttpMethod.Delete, url);
+            req.Headers.Add("X-Api-Key", API_KEY);
+
+            HttpResponseMessage resp;
+            try
+            {
+                resp = await http.SendAsync(req).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Pulse: HTTP DELETE by-playnite failed for id=" + id);
+                throw;
+            }
+
+            var responseBody = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            if ((int)resp.StatusCode == 404)
+            {
+                logger.Info("Pulse: delete by-playnite returned 404 (game may already be gone): " + id);
+                continue;
+            }
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                logger.Error("Pulse: backend responded with " + resp.StatusCode + ": " + responseBody);
+                throw new Exception("Pulse backend error: " + resp.StatusCode);
+            }
+        }
+
+        logger.Info("Pulse: successfully processed " + ids.Count + " delete(s) by playnite id.");
     }
 
     public async Task SyncGamesAsync(IEnumerable<Game> games)

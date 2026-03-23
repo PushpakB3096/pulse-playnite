@@ -1,4 +1,4 @@
-﻿using Playnite.SDK;
+using Playnite.SDK;
 using Playnite.SDK.Data;
 using System;
 using System.Collections.Generic;
@@ -10,12 +10,14 @@ namespace Pulse
 {
     public class PulseSettings : ObservableObject
     {
-        private string option1 = string.Empty;
-        private bool option2 = false;
-        private bool optionThatWontBeSaved = false;
+        private bool autoSyncLibrary = true;
 
-        public string Option1 { get => option1; set => SetValue(ref option1, value); }
-        public bool Option2 { get => option2; set => SetValue(ref option2, value); }
+        /// <summary>
+        /// When true, library changes (playtime, adds/removes) sync to Pulse after a short delay.
+        /// </summary>
+        public bool AutoSyncLibrary { get => autoSyncLibrary; set => SetValue(ref autoSyncLibrary, value); }
+
+        private bool optionThatWontBeSaved = false;
         // Playnite serializes settings object to a JSON object and saves it as text file.
         // If you want to exclude some property from being saved then use `JsonDontSerialize` ignore attribute.
         [DontSerialize]
@@ -66,14 +68,14 @@ namespace Pulse
         public void CancelEdit()
         {
             // Code executed when user decides to cancel any changes made since BeginEdit was called.
-            // This method should revert any changes made to Option1 and Option2.
+            // This method should revert any changes made since BeginEdit.
             Settings = editingClone;
         }
 
         public void EndEdit()
         {
             // Code executed when user decides to confirm changes made since BeginEdit was called.
-            // This method should save settings made to Option1 and Option2.
+            // This method should save settings made since BeginEdit.
             plugin.SavePluginSettings(Settings);
         }
 
