@@ -78,7 +78,7 @@ public class PulseAccountClient
         logger.Info("Pulse: successfully processed " + ids.Count + " delete(s) by playnite id.");
     }
 
-    public async Task SyncGamesAsync(IEnumerable<Game> games)
+    public async Task SyncGamesAsync(IEnumerable<Game> games, bool fullLibrarySync = false)
     {
         var gameList = games != null ? games.ToList() : new List<Game>();
         if (gameList.Count == 0)
@@ -89,7 +89,8 @@ public class PulseAccountClient
 
         var payload = new GamesSyncRequest
         {
-            Games = gameList.Select(MapGameToDto).ToList()
+            Games = gameList.Select(MapGameToDto).ToList(),
+            FullLibrarySync = fullLibrarySync
         };
 
         var json = JsonConvert.SerializeObject(payload);
@@ -225,6 +226,9 @@ public class PulseAccountClient
     {
         [JsonProperty("games")]
         public List<PulseGameDto> Games { get; set; }
+
+        [JsonProperty("fullLibrarySync")]
+        public bool FullLibrarySync { get; set; }
     }
 
     private class ReleaseDateDto

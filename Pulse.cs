@@ -34,7 +34,7 @@ namespace Pulse
 
             syncTimer = new System.Timers.Timer(5000);
             syncTimer.AutoReset = false;
-            syncTimer.Elapsed += (_, __) => FlushPendingSyncQueues();
+            syncTimer.Elapsed += (_, __) => FlushPendingSyncQueues(showShutdownProgress: false);
 
             Properties = new GenericPluginProperties
             {
@@ -53,20 +53,40 @@ namespace Pulse
 
         private void SyncAllGames()
         {
+            List<Game> allGames;
             try
             {
-                List<Game> allGames = PlayniteApi.Database.Games.ToList();
-
-                dialogs.ShowMessage($"Pulse: Syncing {allGames.Count} games to backend...", "Pulse");
-
-                client.SyncGamesAsync(allGames).GetAwaiter().GetResult();
-
-                dialogs.ShowMessage("Pulse: Sync complete.", "Pulse");
+                allGames = PlayniteApi.Database.Games.ToList();
             }
             catch (Exception ex)
             {
-                logger.Error(ex, "Pulse: SyncAllGames failed.");
-                dialogs.ShowErrorMessage("Pulse: Sync all games failed.\n" + ex.Message, "Pulse");
+                logger.Error(ex, "Pulse: failed to read library for full sync.");
+                dialogs.ShowErrorMessage("Pulse: Could not read game library.\n" + ex.Message, "Pulse");
+                return;
+            }
+
+            var progressResult = dialogs.ActivateGlobalProgress(
+                args =>
+                {
+                    args.Text = $"Pulse: Syncing {allGames.Count} games...";
+                    try
+                    {
+                        client.SyncGamesAsync(allGames, fullLibrarySync: true).GetAwaiter().GetResult();
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.Error(ex, "Pulse: SyncAllGames failed inside progress.");
+                        throw;
+                    }
+                },
+                new GlobalProgressOptions("Pulse", true) { IsIndeterminate = true });
+
+            if (progressResult.Error != null)
+            {
+                logger.Error(progressResult.Error, "Pulse: Sync all games failed.");
+                dialogs.ShowErrorMessage(
+                    "Pulse: Sync all games failed.\n" + progressResult.Error.Message,
+                    "Pulse");
             }
         }
 
@@ -141,9 +161,17 @@ namespace Pulse
             syncTimer.Start();
         }
 
-        private void FlushPendingSyncQueues()
+        /// <summary>
+        /// Drains pending remove/update queues when auto-sync is enabled; otherwise leaves queues intact.
+        /// </summary>
+        private void FlushPendingSyncQueues(bool showShutdownProgress)
         {
             syncTimer.Stop();
+
+            if (!settings.Settings.AutoSyncLibrary)
+            {
+                return;
+            }
 
             List<Guid> toRemove;
             List<Guid> toUpdate;
@@ -156,43 +184,74 @@ namespace Pulse
                 gameIdsToUpdate.Clear();
             }
 
-            if (!settings.Settings.AutoSyncLibrary)
+            var removedSet = new HashSet<Guid>(toRemove);
+            toUpdate = toUpdate.Where(id => !removedSet.Contains(id)).ToList();
+
+            if (toRemove.Count == 0 && toUpdate.Count == 0)
             {
                 return;
             }
 
-            var removedSet = new HashSet<Guid>(toRemove);
-            toUpdate = toUpdate.Where(id => !removedSet.Contains(id)).ToList();
-
-            try
+            if (showShutdownProgress)
             {
-                if (toRemove.Count > 0)
-                {
-                    var playniteIds = toRemove.Select(id => id.ToString()).ToList();
-                    client.DeleteGamesByPlayniteIdsAsync(playniteIds).GetAwaiter().GetResult();
-                }
-
-                if (toUpdate.Count > 0)
-                {
-                    var games = new List<Game>();
-                    foreach (var id in toUpdate)
+                var progressResult = dialogs.ActivateGlobalProgress(
+                    args =>
                     {
-                        var g = PlayniteApi.Database.Games.Get(id);
-                        if (g != null)
+                        args.Text = "Pulse: Syncing pending library changes...";
+                        try
                         {
-                            games.Add(g);
+                            ExecutePendingSyncWork(toRemove, toUpdate);
                         }
-                    }
+                        catch (Exception ex)
+                        {
+                            logger.Error(ex, "Pulse: shutdown sync failed inside progress.");
+                            throw;
+                        }
+                    },
+                    new GlobalProgressOptions("Pulse", true) { IsIndeterminate = true });
 
-                    if (games.Count > 0)
-                    {
-                        client.SyncGamesAsync(games).GetAwaiter().GetResult();
-                    }
+                if (progressResult.Error != null)
+                {
+                    logger.Error(progressResult.Error, "Pulse: pending sync on shutdown failed.");
                 }
             }
-            catch (Exception ex)
+            else
             {
-                logger.Error(ex, "Pulse: background library sync failed.");
+                try
+                {
+                    ExecutePendingSyncWork(toRemove, toUpdate);
+                }
+                catch (Exception ex)
+                {
+                    logger.Error(ex, "Pulse: background library sync failed.");
+                }
+            }
+        }
+
+        private void ExecutePendingSyncWork(List<Guid> toRemove, List<Guid> toUpdate)
+        {
+            if (toRemove.Count > 0)
+            {
+                var playniteIds = toRemove.Select(id => id.ToString()).ToList();
+                client.DeleteGamesByPlayniteIdsAsync(playniteIds).GetAwaiter().GetResult();
+            }
+
+            if (toUpdate.Count > 0)
+            {
+                var games = new List<Game>();
+                foreach (var id in toUpdate)
+                {
+                    var g = PlayniteApi.Database.Games.Get(id);
+                    if (g != null)
+                    {
+                        games.Add(g);
+                    }
+                }
+
+                if (games.Count > 0)
+                {
+                    client.SyncGamesAsync(games, fullLibrarySync: false).GetAwaiter().GetResult();
+                }
             }
         }
 
@@ -222,7 +281,7 @@ namespace Pulse
 
         public override void OnApplicationStopped(OnApplicationStoppedEventArgs args)
         {
-            FlushPendingSyncQueues();
+            FlushPendingSyncQueues(showShutdownProgress: true);
         }
 
         public override void OnLibraryUpdated(OnLibraryUpdatedEventArgs args)
