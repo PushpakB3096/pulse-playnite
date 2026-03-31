@@ -20,6 +20,8 @@ public class PulseAccountClient
 
     private readonly string gamesSyncEndpoint;
     private readonly string gamesByPlayniteDeletePrefix;
+    private readonly string sessionStartEndpoint;
+    private readonly string sessionStopEndpoint;
 
     public PulseAccountClient(IPlayniteAPI api)
     {
@@ -29,6 +31,100 @@ public class PulseAccountClient
         var baseUrlClean = BASE_URL.TrimEnd('/');
         gamesSyncEndpoint = baseUrlClean + "/api/games/sync";
         gamesByPlayniteDeletePrefix = baseUrlClean + "/api/games/by-playnite/";
+        sessionStartEndpoint = baseUrlClean + "/api/sessions/start";
+        sessionStopEndpoint = baseUrlClean + "/api/sessions/stop";
+    }
+
+    public async Task PostSessionStartAsync(SessionStartDto dto)
+    {
+        if (dto == null)
+            throw new ArgumentNullException(nameof(dto));
+
+        var json = JsonConvert.SerializeObject(dto);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        var req = new HttpRequestMessage(HttpMethod.Post, sessionStartEndpoint);
+        req.Content = content;
+        req.Headers.Add("X-Api-Key", API_KEY);
+
+        HttpResponseMessage resp;
+        try
+        {
+            resp = await http.SendAsync(req).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.Error(ex, "Pulse: HTTP session start failed.");
+            throw;
+        }
+
+        var responseBody = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+        if (!resp.IsSuccessStatusCode)
+        {
+            logger.Error("Pulse: session start backend responded with " + resp.StatusCode + ": " + responseBody);
+            throw new Exception("Pulse backend error: " + resp.StatusCode);
+        }
+
+        logger.Info("Pulse: session start posted for clientSessionId=" + dto.ClientSessionId);
+    }
+
+    public async Task PostSessionStopAsync(SessionStopDto dto)
+    {
+        if (dto == null)
+            throw new ArgumentNullException(nameof(dto));
+
+        var json = JsonConvert.SerializeObject(dto);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        var req = new HttpRequestMessage(HttpMethod.Post, sessionStopEndpoint);
+        req.Content = content;
+        req.Headers.Add("X-Api-Key", API_KEY);
+
+        HttpResponseMessage resp;
+        try
+        {
+            resp = await http.SendAsync(req).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.Error(ex, "Pulse: HTTP session stop failed.");
+            throw;
+        }
+
+        var responseBody = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+        if (!resp.IsSuccessStatusCode)
+        {
+            logger.Error("Pulse: session stop backend responded with " + resp.StatusCode + ": " + responseBody);
+            throw new Exception("Pulse backend error: " + resp.StatusCode);
+        }
+
+        logger.Info("Pulse: session stop posted for clientSessionId=" + dto.ClientSessionId);
+    }
+
+    public class SessionStartDto
+    {
+        [JsonProperty("clientSessionId")]
+        public string ClientSessionId { get; set; }
+
+        [JsonProperty("playniteId")]
+        public string PlayniteId { get; set; }
+
+        [JsonProperty("startTime")]
+        public string StartTime { get; set; }
+    }
+
+    public class SessionStopDto
+    {
+        [JsonProperty("clientSessionId")]
+        public string ClientSessionId { get; set; }
+
+        [JsonProperty("playniteId")]
+        public string PlayniteId { get; set; }
+
+        [JsonProperty("endTime")]
+        public string EndTime { get; set; }
     }
 
     public async Task DeleteGamesByPlayniteIdsAsync(IEnumerable<string> playniteIds)

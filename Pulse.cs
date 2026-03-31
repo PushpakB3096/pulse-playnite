@@ -4,6 +4,7 @@ using Playnite.SDK.Models;
 using Playnite.SDK.Plugins;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Windows.Controls;
 
@@ -21,12 +22,18 @@ namespace Pulse
         private readonly object syncQueueLock = new object();
         private readonly System.Timers.Timer syncTimer;
 
+        private readonly Dictionary<Guid, string> activeSessionByGameId = new Dictionary<Guid, string>();
+        private readonly object sessionMapLock = new object();
+        private readonly SessionSyncQueue sessionQueue;
+
         public override Guid Id { get; } = Guid.Parse("d1ac11bf-1668-455f-ad91-6fdb334a54c5");
 
         public Pulse(IPlayniteAPI api) : base(api)
         {
             dialogs = api.Dialogs;
             client = new PulseAccountClient(api);
+            var sessionQueuePath = Path.Combine(GetPluginUserDataPath(), "pulse-session-queue.jsonl");
+            sessionQueue = new SessionSyncQueue(sessionQueuePath, client);
             settings = new PulseSettingsViewModel(this);
 
             PlayniteApi.Database.Games.ItemUpdated += Games_ItemUpdated;
@@ -261,6 +268,36 @@ namespace Pulse
 
         public override void OnGameStarted(OnGameStartedEventArgs args)
         {
+            if (args?.Game == null)
+            {
+                return;
+            }
+
+            try
+            {
+                string oldSessionId;
+                string newSessionId;
+                lock (sessionMapLock)
+                {
+                    activeSessionByGameId.TryGetValue(args.Game.Id, out oldSessionId);
+                    newSessionId = Guid.NewGuid().ToString("D");
+                    activeSessionByGameId[args.Game.Id] = newSessionId;
+                }
+
+                var startUtc = DateTime.UtcNow;
+                var playniteIdStr = args.Game.Id.ToString();
+                if (!string.IsNullOrEmpty(oldSessionId))
+                {
+                    sessionQueue.EnqueueStop(oldSessionId, playniteIdStr, startUtc);
+                }
+
+                sessionQueue.EnqueueStart(newSessionId, playniteIdStr, startUtc);
+                sessionQueue.TryDrainAll();
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Pulse: OnGameStarted session tracking failed.");
+            }
         }
 
         public override void OnGameStarting(OnGameStartingEventArgs args)
@@ -269,6 +306,33 @@ namespace Pulse
 
         public override void OnGameStopped(OnGameStoppedEventArgs args)
         {
+            if (args?.Game == null)
+            {
+                return;
+            }
+
+            try
+            {
+                string clientSessionId;
+                lock (sessionMapLock)
+                {
+                    if (!activeSessionByGameId.TryGetValue(args.Game.Id, out clientSessionId))
+                    {
+                        logger.Warn("Pulse: OnGameStopped without matching session start (restart mid-session?).");
+                        return;
+                    }
+
+                    activeSessionByGameId.Remove(args.Game.Id);
+                }
+
+                var endUtc = DateTime.UtcNow;
+                sessionQueue.EnqueueStop(clientSessionId, args.Game.Id.ToString(), endUtc);
+                sessionQueue.TryDrainAll();
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Pulse: OnGameStopped session tracking failed.");
+            }
         }
 
         public override void OnGameUninstalled(OnGameUninstalledEventArgs args)
@@ -277,11 +341,27 @@ namespace Pulse
 
         public override void OnApplicationStarted(OnApplicationStartedEventArgs args)
         {
+            try
+            {
+                sessionQueue.TryDrainAll();
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Pulse: session queue drain on startup failed.");
+            }
         }
 
         public override void OnApplicationStopped(OnApplicationStoppedEventArgs args)
         {
             FlushPendingSyncQueues(showShutdownProgress: true);
+            try
+            {
+                sessionQueue.TryDrainAll();
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Pulse: session queue drain on shutdown failed.");
+            }
         }
 
         public override void OnLibraryUpdated(OnLibraryUpdatedEventArgs args)
