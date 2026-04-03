@@ -54,7 +54,7 @@ public class PulseAccountClient
         }
         catch (Exception ex)
         {
-            logger.Error(ex, "Pulse: HTTP session start failed.");
+            logger.Error(ex, "PlayLog: HTTP session start failed.");
             throw;
         }
 
@@ -62,11 +62,11 @@ public class PulseAccountClient
 
         if (!resp.IsSuccessStatusCode)
         {
-            logger.Error("Pulse: session start backend responded with " + resp.StatusCode + ": " + responseBody);
-            throw new Exception("Pulse backend error: " + resp.StatusCode);
+            logger.Error("PlayLog: session start backend responded with " + resp.StatusCode + ": " + responseBody);
+            throw new Exception("PlayLog backend error: " + resp.StatusCode);
         }
 
-        logger.Info("Pulse: session start posted for clientSessionId=" + dto.ClientSessionId);
+        logger.Info("PlayLog: session start posted for clientSessionId=" + dto.ClientSessionId);
     }
 
     public async Task PostSessionStopAsync(SessionStopDto dto)
@@ -88,7 +88,7 @@ public class PulseAccountClient
         }
         catch (Exception ex)
         {
-            logger.Error(ex, "Pulse: HTTP session stop failed.");
+            logger.Error(ex, "PlayLog: HTTP session stop failed.");
             throw;
         }
 
@@ -96,11 +96,11 @@ public class PulseAccountClient
 
         if (!resp.IsSuccessStatusCode)
         {
-            logger.Error("Pulse: session stop backend responded with " + resp.StatusCode + ": " + responseBody);
-            throw new Exception("Pulse backend error: " + resp.StatusCode);
+            logger.Error("PlayLog: session stop backend responded with " + resp.StatusCode + ": " + responseBody);
+            throw new Exception("PlayLog backend error: " + resp.StatusCode);
         }
 
-        logger.Info("Pulse: session stop posted for clientSessionId=" + dto.ClientSessionId);
+        logger.Info("PlayLog: session stop posted for clientSessionId=" + dto.ClientSessionId);
     }
 
     public class SessionStartDto
@@ -135,7 +135,7 @@ public class PulseAccountClient
 
         if (ids.Count == 0)
         {
-            logger.Info("Pulse: DeleteGamesByPlayniteIdsAsync called with 0 ids.");
+            logger.Info("PlayLog: DeleteGamesByPlayniteIdsAsync called with 0 ids.");
             return;
         }
 
@@ -152,7 +152,7 @@ public class PulseAccountClient
             }
             catch (Exception ex)
             {
-                logger.Error(ex, "Pulse: HTTP DELETE by-playnite failed for id=" + id);
+                logger.Error(ex, "PlayLog: HTTP DELETE by-playnite failed for id=" + id);
                 throw;
             }
 
@@ -160,18 +160,18 @@ public class PulseAccountClient
 
             if ((int)resp.StatusCode == 404)
             {
-                logger.Info("Pulse: delete by-playnite returned 404 (game may already be gone): " + id);
+                logger.Info("PlayLog: delete by-playnite returned 404 (game may already be gone): " + id);
                 continue;
             }
 
             if (!resp.IsSuccessStatusCode)
             {
-                logger.Error("Pulse: backend responded with " + resp.StatusCode + ": " + responseBody);
-                throw new Exception("Pulse backend error: " + resp.StatusCode);
+                logger.Error("PlayLog: backend responded with " + resp.StatusCode + ": " + responseBody);
+                throw new Exception("PlayLog backend error: " + resp.StatusCode);
             }
         }
 
-        logger.Info("Pulse: successfully processed " + ids.Count + " delete(s) by playnite id.");
+        logger.Info("PlayLog: successfully processed " + ids.Count + " delete(s) by playnite id.");
     }
 
     public async Task SyncGamesAsync(IEnumerable<Game> games, bool fullLibrarySync = false)
@@ -179,7 +179,7 @@ public class PulseAccountClient
         var gameList = games != null ? games.ToList() : new List<Game>();
         if (gameList.Count == 0)
         {
-            logger.Info("Pulse: SyncGamesAsync called with 0 games.");
+            logger.Info("PlayLog: SyncGamesAsync called with 0 games.");
             return;
         }
 
@@ -203,7 +203,7 @@ public class PulseAccountClient
         }
         catch (Exception ex)
         {
-            logger.Error(ex, "Pulse: HTTP request to games/sync failed.");
+            logger.Error(ex, "PlayLog: HTTP request to games/sync failed.");
             throw;
         }
 
@@ -211,11 +211,11 @@ public class PulseAccountClient
 
         if (!resp.IsSuccessStatusCode)
         {
-            logger.Error("Pulse: backend responded with " + resp.StatusCode + ": " + responseBody);
-            throw new Exception("Pulse backend error: " + resp.StatusCode);
+            logger.Error("PlayLog: backend responded with " + resp.StatusCode + ": " + responseBody);
+            throw new Exception("PlayLog backend error: " + resp.StatusCode);
         }
 
-        logger.Info("Pulse: successfully synced " + gameList.Count + " game(s).");
+        logger.Info("PlayLog: successfully synced " + gameList.Count + " game(s).");
     }
 
     private PulseGameDto MapGameToDto(Game game)

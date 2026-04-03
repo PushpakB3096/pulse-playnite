@@ -13,7 +13,7 @@ namespace Pulse
         private bool autoSyncLibrary = true;
 
         /// <summary>
-        /// When true, library changes (playtime, adds/removes) sync to Pulse after a short delay.
+        /// When true, library changes (playtime, adds/removes) sync to PlayLog after a short delay.
         /// </summary>
         public bool AutoSyncLibrary { get => autoSyncLibrary; set => SetValue(ref autoSyncLibrary, value); }
 

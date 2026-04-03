@@ -94,7 +94,7 @@ namespace Pulse
                     }
                     catch (Exception ex)
                     {
-                        logger.Error(ex, "Pulse: session queue line failed; keeping remaining lines for retry.");
+                        logger.Error(ex, "PlayLog: session queue line failed; keeping remaining lines for retry.");
                         break;
                     }
                 }
@@ -123,7 +123,7 @@ namespace Pulse
             var row = JsonConvert.DeserializeObject<SessionQueueLine>(line);
             if (row == null || string.IsNullOrWhiteSpace(row.Kind))
             {
-                logger.Warn("Pulse: skipping malformed session queue line.");
+                logger.Warn("PlayLog: skipping malformed session queue line.");
                 return;
             }
 
@@ -149,7 +149,7 @@ namespace Pulse
                 return;
             }
 
-            logger.Warn("Pulse: unknown session queue kind: " + row.Kind);
+            logger.Warn("PlayLog: unknown session queue kind: " + row.Kind);
         }
 
         private sealed class SessionQueueLine

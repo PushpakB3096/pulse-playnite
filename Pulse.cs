@@ -53,7 +53,7 @@ namespace Pulse
         {
             yield return new MainMenuItem
             {
-                Description = "Pulse: Sync all games",
+                Description = "PlayLog: Sync all games",
                 Action = _ => SyncAllGames()
             };
         }
@@ -67,33 +67,33 @@ namespace Pulse
             }
             catch (Exception ex)
             {
-                logger.Error(ex, "Pulse: failed to read library for full sync.");
-                dialogs.ShowErrorMessage("Pulse: Could not read game library.\n" + ex.Message, "Pulse");
+                logger.Error(ex, "PlayLog: failed to read library for full sync.");
+                dialogs.ShowErrorMessage("PlayLog: Could not read game library.\n" + ex.Message, "PlayLog");
                 return;
             }
 
             var progressResult = dialogs.ActivateGlobalProgress(
                 args =>
                 {
-                    args.Text = $"Pulse: Syncing {allGames.Count} games...";
+                    args.Text = $"PlayLog: Syncing {allGames.Count} games...";
                     try
                     {
                         client.SyncGamesAsync(allGames, fullLibrarySync: true).GetAwaiter().GetResult();
                     }
                     catch (Exception ex)
                     {
-                        logger.Error(ex, "Pulse: SyncAllGames failed inside progress.");
+                        logger.Error(ex, "PlayLog: SyncAllGames failed inside progress.");
                         throw;
                     }
                 },
-                new GlobalProgressOptions("Pulse", true) { IsIndeterminate = true });
+                new GlobalProgressOptions("PlayLog", true) { IsIndeterminate = true });
 
             if (progressResult.Error != null)
             {
-                logger.Error(progressResult.Error, "Pulse: Sync all games failed.");
+                logger.Error(progressResult.Error, "PlayLog: Sync all games failed.");
                 dialogs.ShowErrorMessage(
-                    "Pulse: Sync all games failed.\n" + progressResult.Error.Message,
-                    "Pulse");
+                    "PlayLog: Sync all games failed.\n" + progressResult.Error.Message,
+                    "PlayLog");
             }
         }
 
@@ -204,22 +204,22 @@ namespace Pulse
                 var progressResult = dialogs.ActivateGlobalProgress(
                     args =>
                     {
-                        args.Text = "Pulse: Syncing pending library changes...";
+                        args.Text = "PlayLog: Syncing pending library changes...";
                         try
                         {
                             ExecutePendingSyncWork(toRemove, toUpdate);
                         }
                         catch (Exception ex)
                         {
-                            logger.Error(ex, "Pulse: shutdown sync failed inside progress.");
+                            logger.Error(ex, "PlayLog: shutdown sync failed inside progress.");
                             throw;
                         }
                     },
-                    new GlobalProgressOptions("Pulse", true) { IsIndeterminate = true });
+                    new GlobalProgressOptions("PlayLog", true) { IsIndeterminate = true });
 
                 if (progressResult.Error != null)
                 {
-                    logger.Error(progressResult.Error, "Pulse: pending sync on shutdown failed.");
+                    logger.Error(progressResult.Error, "PlayLog: pending sync on shutdown failed.");
                 }
             }
             else
@@ -230,7 +230,7 @@ namespace Pulse
                 }
                 catch (Exception ex)
                 {
-                    logger.Error(ex, "Pulse: background library sync failed.");
+                    logger.Error(ex, "PlayLog: background library sync failed.");
                 }
             }
         }
@@ -296,7 +296,7 @@ namespace Pulse
             }
             catch (Exception ex)
             {
-                logger.Error(ex, "Pulse: OnGameStarted session tracking failed.");
+                logger.Error(ex, "PlayLog: OnGameStarted session tracking failed.");
             }
         }
 
@@ -318,7 +318,7 @@ namespace Pulse
                 {
                     if (!activeSessionByGameId.TryGetValue(args.Game.Id, out clientSessionId))
                     {
-                        logger.Warn("Pulse: OnGameStopped without matching session start (restart mid-session?).");
+                        logger.Warn("PlayLog: OnGameStopped without matching session start (restart mid-session?).");
                         return;
                     }
 
@@ -331,7 +331,7 @@ namespace Pulse
             }
             catch (Exception ex)
             {
-                logger.Error(ex, "Pulse: OnGameStopped session tracking failed.");
+                logger.Error(ex, "PlayLog: OnGameStopped session tracking failed.");
             }
         }
 
@@ -347,7 +347,7 @@ namespace Pulse
             }
             catch (Exception ex)
             {
-                logger.Error(ex, "Pulse: session queue drain on startup failed.");
+                logger.Error(ex, "PlayLog: session queue drain on startup failed.");
             }
         }
 
@@ -360,7 +360,7 @@ namespace Pulse
             }
             catch (Exception ex)
             {
-                logger.Error(ex, "Pulse: session queue drain on shutdown failed.");
+                logger.Error(ex, "PlayLog: session queue drain on shutdown failed.");
             }
         }
 

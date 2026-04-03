@@ -6,9 +6,9 @@
              mc:Ignorable="d"
              d:DesignHeight="400" d:DesignWidth="600">
     <StackPanel Margin="8">
-        <CheckBox Content="Automatically sync library changes to Pulse (playtime, new games, removals)"
+        <CheckBox Content="Automatically sync library changes to PlayLog (playtime, new games, removals)"
                   IsChecked="{Binding Settings.AutoSyncLibrary}"/>
         <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="Gray"
-                   Text="When enabled, Pulse syncs after Playnite updates your library. You can still use Pulse: Sync all games from the main menu."/>
+                   Text="When enabled, PlayLog syncs after Playnite updates your library. You can still use PlayLog: Sync all games from the main menu."/>
     </StackPanel>
 </UserControl>
