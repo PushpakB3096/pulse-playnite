@@ -17,6 +17,13 @@ namespace Pulse
         /// </summary>
         public bool AutoSyncLibrary { get => autoSyncLibrary; set => SetValue(ref autoSyncLibrary, value); }
 
+        private string playLogBearerToken = string.Empty;
+
+        /// <summary>
+        /// Bearer token from PlayLog pairing (`pl_…`). Required for sync and session APIs.
+        /// </summary>
+        public string PlayLogBearerToken { get => playLogBearerToken; set => SetValue(ref playLogBearerToken, value); }
+
         private bool optionThatWontBeSaved = false;
         // Playnite serializes settings object to a JSON object and saves it as text file.
         // If you want to exclude some property from being saved then use `JsonDontSerialize` ignore attribute.
@@ -86,6 +93,11 @@ namespace Pulse
             // List of errors is presented to user if verification fails.
             errors = new List<string>();
             return true;
+        }
+
+        public async System.Threading.Tasks.Task RunPairingAsync()
+        {
+            await plugin.RunPairingFlowAsync().ConfigureAwait(false);
         }
     }
 }

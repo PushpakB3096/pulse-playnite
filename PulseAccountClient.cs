@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Playnite.SDK;
@@ -14,25 +14,38 @@ public class PulseAccountClient
     private static readonly ILogger logger = LogManager.GetLogger();
 
     private const string BASE_URL = "https://pulse-server-m2u1.onrender.com";
-    private const string API_KEY = "pulse-api-key";
 
     private static readonly HttpClient http = new HttpClient();
 
+    private readonly Func<string> getBearerToken;
     private readonly string gamesSyncEndpoint;
     private readonly string gamesByPlayniteDeletePrefix;
     private readonly string sessionStartEndpoint;
     private readonly string sessionStopEndpoint;
+    private readonly string pairingStartEndpoint;
+    private readonly string pairingStatusPrefix;
 
-    public PulseAccountClient(IPlayniteAPI api)
+    public PulseAccountClient(IPlayniteAPI api, Func<string> getBearerToken)
     {
         if (api == null)
             throw new ArgumentNullException(nameof(api));
+        this.getBearerToken = getBearerToken ?? throw new ArgumentNullException(nameof(getBearerToken));
 
         var baseUrlClean = BASE_URL.TrimEnd('/');
         gamesSyncEndpoint = baseUrlClean + "/api/games/sync";
         gamesByPlayniteDeletePrefix = baseUrlClean + "/api/games/by-playnite/";
         sessionStartEndpoint = baseUrlClean + "/api/sessions/start";
         sessionStopEndpoint = baseUrlClean + "/api/sessions/stop";
+        pairingStartEndpoint = baseUrlClean + "/api/pairing/start";
+        pairingStatusPrefix = baseUrlClean + "/api/pairing/";
+    }
+
+    private void ApplyBearer(HttpRequestMessage req)
+    {
+        var t = getBearerToken != null ? getBearerToken.Invoke() : null;
+        if (string.IsNullOrWhiteSpace(t))
+            return;
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", t.Trim());
     }
 
     public async Task PostSessionStartAsync(SessionStartDto dto)
@@ -45,7 +58,7 @@ public class PulseAccountClient
 
         var req = new HttpRequestMessage(HttpMethod.Post, sessionStartEndpoint);
         req.Content = content;
-        req.Headers.Add("X-Api-Key", API_KEY);
+        ApplyBearer(req);
 
         HttpResponseMessage resp;
         try
@@ -79,7 +92,7 @@ public class PulseAccountClient
 
         var req = new HttpRequestMessage(HttpMethod.Post, sessionStopEndpoint);
         req.Content = content;
-        req.Headers.Add("X-Api-Key", API_KEY);
+        ApplyBearer(req);
 
         HttpResponseMessage resp;
         try
@@ -143,7 +156,7 @@ public class PulseAccountClient
         {
             var url = gamesByPlayniteDeletePrefix + Uri.EscapeDataString(id);
             var req = new HttpRequestMessage(HttpMethod.Delete, url);
-            req.Headers.Add("X-Api-Key", API_KEY);
+            ApplyBearer(req);
 
             HttpResponseMessage resp;
             try
@@ -194,7 +207,7 @@ public class PulseAccountClient
 
         var req = new HttpRequestMessage(HttpMethod.Post, gamesSyncEndpoint);
         req.Content = content;
-        req.Headers.Add("X-Api-Key", API_KEY);
+        ApplyBearer(req);
 
         HttpResponseMessage resp;
         try
@@ -216,6 +229,124 @@ public class PulseAccountClient
         }
 
         logger.Info("PlayLog: successfully synced " + gameList.Count + " game(s).");
+    }
+
+    public async Task<PairingStartResult> StartPairingAsync()
+    {
+        var content = new StringContent("{}", Encoding.UTF8, "application/json");
+        var req = new HttpRequestMessage(HttpMethod.Post, pairingStartEndpoint);
+        req.Content = content;
+
+        HttpResponseMessage resp;
+        try
+        {
+            resp = await http.SendAsync(req).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.Error(ex, "PlayLog: HTTP pairing start failed.");
+            throw;
+        }
+
+        var responseBody = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode)
+        {
+            logger.Error("PlayLog: pairing start responded with " + resp.StatusCode + ": " + responseBody);
+            throw new Exception("PlayLog backend error: " + resp.StatusCode);
+        }
+
+        var env = JsonConvert.DeserializeObject<ApiEnvelope<PairingStartData>>(responseBody);
+        if (env?.Data == null || string.IsNullOrWhiteSpace(env.Data.PairingId))
+        {
+            throw new Exception("PlayLog: invalid pairing start response.");
+        }
+
+        return new PairingStartResult
+        {
+            PairingId = env.Data.PairingId,
+            UserCode = env.Data.UserCode
+        };
+    }
+
+    public async Task<PairingStatusResult> GetPairingStatusAsync(string pairingId)
+    {
+        if (string.IsNullOrWhiteSpace(pairingId))
+            throw new ArgumentException("pairingId required", nameof(pairingId));
+
+        var url = pairingStatusPrefix + Uri.EscapeDataString(pairingId.Trim()) + "/status";
+        var req = new HttpRequestMessage(HttpMethod.Get, url);
+
+        HttpResponseMessage resp;
+        try
+        {
+            resp = await http.SendAsync(req).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.Error(ex, "PlayLog: HTTP pairing status failed.");
+            throw;
+        }
+
+        var responseBody = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode)
+        {
+            logger.Error("PlayLog: pairing status responded with " + resp.StatusCode + ": " + responseBody);
+            throw new Exception("PlayLog backend error: " + resp.StatusCode);
+        }
+
+        var env = JsonConvert.DeserializeObject<ApiEnvelope<PairingStatusData>>(responseBody);
+        if (env?.Data == null)
+        {
+            throw new Exception("PlayLog: invalid pairing status response.");
+        }
+
+        return new PairingStatusResult
+        {
+            Status = env.Data.Status,
+            PluginToken = env.Data.PluginToken
+        };
+    }
+
+    private class ApiEnvelope<T>
+    {
+        [JsonProperty("success")]
+        public bool Success { get; set; }
+
+        [JsonProperty("data")]
+        public T Data { get; set; }
+    }
+
+    private class PairingStartData
+    {
+        [JsonProperty("pairingId")]
+        public string PairingId { get; set; }
+
+        [JsonProperty("userCode")]
+        public string UserCode { get; set; }
+
+        [JsonProperty("expiresAt")]
+        public string ExpiresAt { get; set; }
+    }
+
+    private class PairingStatusData
+    {
+        [JsonProperty("status")]
+        public string Status { get; set; }
+
+        [JsonProperty("pluginToken")]
+        public string PluginToken { get; set; }
+    }
+
+    public sealed class PairingStartResult
+    {
+        public string PairingId { get; set; }
+        public string UserCode { get; set; }
+    }
+
+    public sealed class PairingStatusResult
+    {
+        public string Status { get; set; }
+        public string PluginToken { get; set; }
     }
 
     private PulseGameDto MapGameToDto(Game game)

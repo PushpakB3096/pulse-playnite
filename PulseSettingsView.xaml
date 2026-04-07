@@ -10,5 +10,10 @@
                   IsChecked="{Binding Settings.AutoSyncLibrary}"/>
         <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="Gray"
                    Text="When enabled, PlayLog syncs after Playnite updates your library. You can still use PlayLog: Sync all games from the main menu."/>
+        <TextBlock Margin="0,16,0,0" TextWrapping="Wrap" FontWeight="SemiBold"
+                   Text="PlayLog account"/>
+        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="Gray"
+                   Text="Link pairs this PC with your PlayLog account. Enter the short code shown here in the PlayLog app on your phone (signed in)."/>
+        <Button Margin="0,8,0,0" Content="Link PlayLog account" Click="LinkAccount_Click"/>
     </StackPanel>
 </UserControl>

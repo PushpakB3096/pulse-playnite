@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Controls;
 
 namespace Pulse
@@ -31,11 +32,10 @@ namespace Pulse
         public Pulse(IPlayniteAPI api) : base(api)
         {
             dialogs = api.Dialogs;
-            client = new PulseAccountClient(api);
+            settings = new PulseSettingsViewModel(this);
+            client = new PulseAccountClient(api, () => settings.Settings.PlayLogBearerToken?.Trim() ?? string.Empty);
             var sessionQueuePath = Path.Combine(GetPluginUserDataPath(), "pulse-session-queue.jsonl");
             sessionQueue = new SessionSyncQueue(sessionQueuePath, client);
-            settings = new PulseSettingsViewModel(this);
-
             PlayniteApi.Database.Games.ItemUpdated += Games_ItemUpdated;
             PlayniteApi.Database.Games.ItemCollectionChanged += Games_ItemCollectionChanged;
 
@@ -47,6 +47,47 @@ namespace Pulse
             {
                 HasSettings = true
             };
+        }
+
+        public async Task RunPairingFlowAsync()
+        {
+            try
+            {
+                var start = await client.StartPairingAsync().ConfigureAwait(false);
+                if (start == null || string.IsNullOrEmpty(start.PairingId))
+                {
+                    dialogs.ShowErrorMessage("PlayLog: Could not start pairing.", "PlayLog");
+                    return;
+                }
+
+                dialogs.ShowMessage(
+                    "Enter this code in the PlayLog app on your phone (signed in):\n\n" + start.UserCode,
+                    "PlayLog pairing");
+
+                var deadline = DateTime.UtcNow.AddMinutes(10);
+                while (DateTime.UtcNow < deadline)
+                {
+                    var st = await client.GetPairingStatusAsync(start.PairingId).ConfigureAwait(false);
+                    if (st != null
+                        && string.Equals(st.Status, "completed", StringComparison.OrdinalIgnoreCase)
+                        && !string.IsNullOrEmpty(st.PluginToken))
+                    {
+                        settings.Settings.PlayLogBearerToken = st.PluginToken;
+                        SavePluginSettings(settings.Settings);
+                        dialogs.ShowMessage("PlayLog linked successfully.", "PlayLog");
+                        return;
+                    }
+
+                    await Task.Delay(2000).ConfigureAwait(false);
+                }
+
+                dialogs.ShowErrorMessage("PlayLog: Pairing timed out.", "PlayLog");
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "PlayLog: pairing flow failed.");
+                dialogs.ShowErrorMessage("PlayLog: Pairing failed.\n" + ex.Message, "PlayLog");
+            }
         }
 
         public override IEnumerable<MainMenuItem> GetMainMenuItems(GetMainMenuItemsArgs args)

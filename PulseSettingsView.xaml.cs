@@ -21,5 +21,13 @@ namespace Pulse
         {
             InitializeComponent();
         }
+
+        private async void LinkAccount_Click(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is PulseSettingsViewModel vm)
+            {
+                await vm.RunPairingAsync().ConfigureAwait(true);
+            }
+        }
     }
 }
