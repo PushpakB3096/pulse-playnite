@@ -5,6 +5,9 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
              d:DesignHeight="400" d:DesignWidth="600">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+    </UserControl.Resources>
     <StackPanel Margin="8">
         <CheckBox Content="Automatically sync library changes to PlayLog (playtime, new games, removals)"
                   IsChecked="{Binding Settings.AutoSyncLibrary}"/>
@@ -12,8 +15,17 @@
                    Text="When enabled, PlayLog syncs after Playnite updates your library. You can still use PlayLog: Sync all games from the main menu."/>
         <TextBlock Margin="0,16,0,0" TextWrapping="Wrap" FontWeight="SemiBold"
                    Text="PlayLog account"/>
-        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="Gray"
-                   Text="Link pairs this PC with your PlayLog account. Enter the short code shown here in the PlayLog app on your phone (signed in)."/>
-        <Button Margin="0,8,0,0" Content="Link PlayLog account" Click="LinkAccount_Click"/>
+
+        <StackPanel Visibility="{Binding IsPlayLogLinked, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="Gray"
+                       Text="This PC is linked to your PlayLog account. Library and session sync use the token stored in settings."/>
+            <Button Margin="0,8,0,0" Content="Link another device" Click="LinkAccount_Click"/>
+        </StackPanel>
+
+        <StackPanel Visibility="{Binding IsPlayLogNotLinked, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="Gray"
+                       Text="Link pairs this PC with your PlayLog account. Enter the short code shown here in the PlayLog app on your phone (signed in)."/>
+            <Button Margin="0,8,0,0" Content="Link PlayLog account" Click="LinkAccount_Click"/>
+        </StackPanel>
     </StackPanel>
 </UserControl>

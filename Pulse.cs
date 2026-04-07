@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Controls;
 
 namespace Pulse
@@ -72,9 +73,24 @@ namespace Pulse
                         && string.Equals(st.Status, "completed", StringComparison.OrdinalIgnoreCase)
                         && !string.IsNullOrEmpty(st.PluginToken))
                     {
-                        settings.Settings.PlayLogBearerToken = st.PluginToken;
-                        SavePluginSettings(settings.Settings);
-                        dialogs.ShowMessage("PlayLog linked successfully.", "PlayLog");
+                        var token = st.PluginToken;
+                        void ApplySuccessOnUi()
+                        {
+                            settings.Settings.PlayLogBearerToken = token;
+                            SavePluginSettings(settings.Settings);
+                            dialogs.ShowMessage("PlayLog linked successfully.", "PlayLog");
+                        }
+
+                        if (Application.Current?.Dispatcher != null
+                            && !Application.Current.Dispatcher.CheckAccess())
+                        {
+                            Application.Current.Dispatcher.Invoke(ApplySuccessOnUi);
+                        }
+                        else
+                        {
+                            ApplySuccessOnUi();
+                        }
+
                         return;
                     }
 

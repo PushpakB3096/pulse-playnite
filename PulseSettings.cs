@@ -2,6 +2,7 @@ using Playnite.SDK;
 using Playnite.SDK.Data;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -42,9 +43,42 @@ namespace Pulse
             get => settings;
             set
             {
+                if (settings != null)
+                {
+                    settings.PropertyChanged -= Settings_PropertyChanged;
+                }
+
                 settings = value;
+
+                if (settings != null)
+                {
+                    settings.PropertyChanged += Settings_PropertyChanged;
+                }
+
                 OnPropertyChanged();
+                NotifyPlayLogLinkChanged();
             }
+        }
+
+        /// <summary>True when a PlayLog device token is stored (pairing completed).</summary>
+        public bool IsPlayLogLinked =>
+            !string.IsNullOrEmpty((Settings?.PlayLogBearerToken ?? string.Empty).Trim());
+
+        /// <summary>For binding the "not linked" panel without an inverse converter.</summary>
+        public bool IsPlayLogNotLinked => !IsPlayLogLinked;
+
+        private void Settings_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(PulseSettings.PlayLogBearerToken))
+            {
+                NotifyPlayLogLinkChanged();
+            }
+        }
+
+        private void NotifyPlayLogLinkChanged()
+        {
+            OnPropertyChanged(nameof(IsPlayLogLinked));
+            OnPropertyChanged(nameof(IsPlayLogNotLinked));
         }
 
         public PulseSettingsViewModel(Pulse plugin)
