@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -14,6 +15,32 @@ namespace Pulse
 {
     public class Pulse : GenericPlugin
     {
+        // Must run before other static fields: Playnite may not probe dependencies next to the plugin DLL.
+        private static readonly object NewtonsoftJsonResolveHook = RegisterNewtonsoftAssemblyResolve();
+
+        private static object RegisterNewtonsoftAssemblyResolve()
+        {
+            AppDomain.CurrentDomain.AssemblyResolve += (_, args) =>
+            {
+                try
+                {
+                    var want = new AssemblyName(args.Name);
+                    if (!string.Equals(want.Name, "Newtonsoft.Json", StringComparison.OrdinalIgnoreCase))
+                        return null;
+                    var dir = Path.GetDirectoryName(typeof(Pulse).Assembly.Location);
+                    if (string.IsNullOrEmpty(dir))
+                        return null;
+                    var path = Path.Combine(dir, "Newtonsoft.Json.dll");
+                    return File.Exists(path) ? Assembly.LoadFrom(path) : null;
+                }
+                catch
+                {
+                    return null;
+                }
+            };
+            return null;
+        }
+
         private static readonly ILogger logger = LogManager.GetLogger();
         private readonly IDialogsFactory dialogs;
         private readonly PulseAccountClient client;
