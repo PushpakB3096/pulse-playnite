@@ -27,6 +27,9 @@ concurrency:
 jobs:
   windows:
     runs-on: windows-latest
+    env:
+      # Opt into Node 24 for actions (checkout, msbuild, nuget) before Node 20 removal on runners.
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,6 +45,11 @@ jobs:
 
       - name: MSBuild (Release)
         run: msbuild Pulse.sln /restore:false /p:Configuration=Release /p:Platform="Any CPU" /verbosity:minimal
+
+      - name: When pack and release run
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') && (github.event_name != 'workflow_dispatch' || inputs.full_release != true) }}
+        run: |
+          echo "::notice title=Playnite extension CI::Pack, GitHub Release, and Toolbox verify are skipped on branch/PR builds. To run them: push a tag matching v* (e.g. git tag v1.0.0 && git push origin v1.0.0), or use Actions -> Run workflow -> full_release."
 
       - name: Install Playnite (Toolbox)
         id: playnite
