@@ -1,26 +1,53 @@
-# Full release pipeline: must be triggered only by tag push (see playnite-extension.yml for branch/PR CI).
+# Full release pipeline (Playnite install, pack, GitHub Release, verify). Not the same as playnite-extension.yml (CI).
 name: Playnite extension (release)
 
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v1.0.0). Use if you need to re-run release without pushing the tag again."
+        required: true
+        default: "v1.0.0"
+        type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: playnite-extension-${{ github.ref }}
+  group: playnite-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   windows:
     runs-on: windows-latest
+    outputs:
+      release_tag: ${{ steps.release_tag.outputs.name }}
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
-      - name: Checkout
+      - name: Checkout (tag ref — required for Playnite pack)
         uses: actions/checkout@v4
+        with:
+          # Tag push: github.ref is refs/tags/vX.Y.Z. Manual run: checkout the tag you type.
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Resolve release tag name (ref_name is wrong for workflow_dispatch)
+        id: release_tag
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $t = '${{ inputs.tag }}'
+          } else {
+            $t = '${{ github.ref_name }}'
+          }
+          if ([string]::IsNullOrWhiteSpace($t)) { throw 'Empty release tag name' }
+          "name=$t" >> $env:GITHUB_OUTPUT
+          Write-Host "Using release tag: $t"
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
@@ -75,7 +102,7 @@ jobs:
           & $Toolbox pack $built $out
           $pext = Get-ChildItem -Path $out -Filter "*.pext" | Select-Object -First 1
           if (-not $pext) { throw "Toolbox did not produce a .pext in $out" }
-          $tagName = "${{ github.ref_name }}"
+          $tagName = "${{ steps.release_tag.outputs.name }}"
           if ([string]::IsNullOrWhiteSpace($tagName)) { $tagName = "v0.0.0" }
           $destName = "PlayLog-$tagName.pext"
           $dest = Join-Path $out $destName
@@ -91,7 +118,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $pext = "${{ steps.pack.outputs.pext_path }}"
-          $tag = "${{ github.ref_name }}"
+          $tag = "${{ steps.release_tag.outputs.name }}"
           if (-not (Test-Path $pext)) { throw "Missing packed file: $pext" }
           gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) {
@@ -105,7 +132,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $Toolbox = "${{ steps.playnite.outputs.toolbox_path }}"
-          $tag = "${{ github.ref_name }}"
+          $tag = "${{ steps.release_tag.outputs.name }}"
           $repo = "${{ github.repository }}"
           $pkgUrl = "https://github.com/$repo/releases/download/$tag/${{ steps.pack.outputs.pext_name }}"
           $ver = $tag.TrimStart("v")
@@ -141,7 +168,7 @@ jobs:
 
   update-installer-yaml:
     needs: windows
-    if: success() && startsWith(github.ref, 'refs/tags/v')
+    if: success() && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout default branch
@@ -162,7 +189,7 @@ jobs:
       - name: Merge release into packaging/installer.yaml and push
         env:
           ADDON_ID: Pulse_d1ac11bf-1668-455f-ad91-6fdb334a54c5
-          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_REF_NAME: ${{ needs.windows.outputs.release_tag }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           REQUIRED_API_VERSION: "6.2.0"
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch || 'master' }}
