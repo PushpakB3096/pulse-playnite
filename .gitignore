@@ -4,3 +4,5 @@ obj/
 packages/
 _pext/
 Playnite_setup.exe
+__pycache__/
+*.pyc
