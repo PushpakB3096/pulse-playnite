@@ -1,0 +1,14 @@
+AddonId: Pulse_d1ac11bf-1668-455f-ad91-6fdb334a54c5
+Type: Generic
+Name: PlayLog
+Author: Pushpak Bhattacharya
+ShortDescription: Sync Playnite sessions with PlayLog (link account in extension settings).
+InstallerManifestUrl: INSTALLER_MANIFEST_URL
+SourceUrl: SOURCE_REPO_URL
+Description: |
+  PlayLog connects Playnite to your PlayLog account so session activity can sync to the mobile app.
+  Sign in and complete device linking from the extension settings after installation.
+Tags:
+  - PlayLog
+  - Sync
+  - Sessions

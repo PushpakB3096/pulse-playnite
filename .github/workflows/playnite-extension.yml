@@ -1,0 +1,158 @@
+# Steps 1–2: MSBuild Release + Toolbox pack (tags / manual full run).
+# Step 3: Upload .pext to GitHub Releases.
+# Step 5: Toolbox verify installer (generated URL matches the release asset).
+name: Playnite extension
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      full_release:
+        description: "Install Playnite, pack .pext (no GitHub Release unless also a tag)"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: playnite-extension-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: NuGet restore
+        run: nuget restore Pulse.sln -NonInteractive
+
+      - name: MSBuild (Release)
+        run: msbuild Pulse.sln /restore:false /p:Configuration=Release /p:Platform="Any CPU" /verbosity:minimal
+
+      - name: Install Playnite (Toolbox)
+        id: playnite
+        if: >
+          startsWith(github.ref, 'refs/tags/v') ||
+          (github.event_name == 'workflow_dispatch' && inputs.full_release)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/JosefNemec/Playnite/releases/latest" -Headers @{ "User-Agent" = "pulse-playnite-ci" }
+          $asset = $rel.assets | Where-Object { $_.name -match '^Playnite\d+\.exe$' } | Select-Object -First 1
+          if (-not $asset) { throw "No Playnite*.exe asset in latest Playnite release." }
+          Write-Host "Downloading $($asset.name)"
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "Playnite_setup.exe"
+          $p = Start-Process -FilePath ".\Playnite_setup.exe" -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART") -PassThru -Wait
+          if ($p.ExitCode -ne 0) { Write-Warning "Installer exit code $($p.ExitCode)" }
+          Get-Process -Name "Playnite*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+          $candidates = @(
+            (Join-Path $env:ProgramFiles "Playnite\Toolbox.exe"),
+            (Join-Path ${env:ProgramFiles(x86)} "Playnite\Toolbox.exe"),
+            (Join-Path $env:LOCALAPPDATA "Playnite\Toolbox.exe")
+          )
+          $toolbox = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $toolbox) {
+            $found = Get-ChildItem -Path $env:ProgramFiles, $env:LOCALAPPDATA -Recurse -Filter "Toolbox.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) { $toolbox = $found.FullName }
+          }
+          if (-not $toolbox -or -not (Test-Path $toolbox)) { throw "Toolbox.exe not found after Playnite install." }
+          Write-Host "Toolbox=$toolbox"
+          "toolbox_path=$toolbox" >> $env:GITHUB_OUTPUT
+
+      - name: Pack .pext
+        id: pack
+        if: >
+          startsWith(github.ref, 'refs/tags/v') ||
+          (github.event_name == 'workflow_dispatch' && inputs.full_release)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $Toolbox = "${{ steps.playnite.outputs.toolbox_path }}"
+          $built = Join-Path $PWD "bin\Release"
+          if (-not (Test-Path $built)) { throw "Release output not found: $built" }
+          $out = Join-Path $PWD "_pext"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          & $Toolbox pack $built $out
+          $pext = Get-ChildItem -Path $out -Filter "*.pext" | Select-Object -First 1
+          if (-not $pext) { throw "Toolbox did not produce a .pext in $out" }
+          $tagName = "${{ github.ref_name }}"
+          if ([string]::IsNullOrWhiteSpace($tagName)) { $tagName = "v0.0.0" }
+          $destName = "PlayLog-$tagName.pext"
+          $dest = Join-Path $out $destName
+          Copy-Item -LiteralPath $pext.FullName -Destination $dest -Force
+          Write-Host "Packed: $dest"
+          "pext_path=$dest" >> $env:GITHUB_OUTPUT
+          "pext_name=$destName" >> $env:GITHUB_OUTPUT
+
+      - name: Create or update GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $pext = "${{ steps.pack.outputs.pext_path }}"
+          $tag = "${{ github.ref_name }}"
+          if (-not (Test-Path $pext)) { throw "Missing packed file: $pext" }
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $pext --clobber
+          } else {
+            gh release create $tag $pext --generate-notes --title $tag
+          }
+
+      - name: Toolbox verify (installer manifest)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $Toolbox = "${{ steps.playnite.outputs.toolbox_path }}"
+          $tag = "${{ github.ref_name }}"
+          $repo = "${{ github.repository }}"
+          $pkgUrl = "https://github.com/$repo/releases/download/$tag/${{ steps.pack.outputs.pext_name }}"
+          $ver = $tag.TrimStart("v")
+          $today = Get-Date -Format "yyyy-MM-dd"
+          $nl = [Environment]::NewLine
+          $yaml = "AddonId: Pulse_d1ac11bf-1668-455f-ad91-6fdb334a54c5$nl" +
+            "Packages:$nl" +
+            "  - Version: $ver$nl" +
+            "    RequiredApiVersion: 6.2.0$nl" +
+            "    ReleaseDate: $today$nl" +
+            "    PackageUrl: $pkgUrl$nl" +
+            "    Changelog:$nl" +
+            "      - See GitHub release notes$nl"
+          Set-Content -Path "_installer-verify.yaml" -Value $yaml -Encoding utf8 -NoNewline
+          Get-Content "_installer-verify.yaml"
+          & $Toolbox verify installer (Join-Path $PWD "_installer-verify.yaml")
+
+      - name: Toolbox verify (add-on manifest for store PR)
+        if: startsWith(github.ref, 'refs/tags/v')
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $Toolbox = "${{ steps.playnite.outputs.toolbox_path }}"
+          $sha = "${{ github.sha }}"
+          $repo = "${{ github.repository }}"
+          $installerUrl = "https://raw.githubusercontent.com/$repo/$sha/packaging/installer.yaml"
+          $sourceUrl = "https://github.com/$repo"
+          $addonPath = Join-Path $PWD "packaging\playnite-addon-database.yaml"
+          $content = Get-Content -Raw -Path $addonPath
+          $content = $content.Replace("INSTALLER_MANIFEST_URL", $installerUrl).Replace("SOURCE_REPO_URL", $sourceUrl)
+          Set-Content -Path "_addon-verify.yaml" -Value $content -Encoding utf8
+          & $Toolbox verify addon (Join-Path $PWD "_addon-verify.yaml")
