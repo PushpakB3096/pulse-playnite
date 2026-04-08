@@ -20,25 +20,84 @@ namespace Pulse
 
         private static object RegisterNewtonsoftAssemblyResolve()
         {
-            AppDomain.CurrentDomain.AssemblyResolve += (_, args) =>
-            {
-                try
-                {
-                    var want = new AssemblyName(args.Name);
-                    if (!string.Equals(want.Name, "Newtonsoft.Json", StringComparison.OrdinalIgnoreCase))
-                        return null;
-                    var dir = Path.GetDirectoryName(typeof(Pulse).Assembly.Location);
-                    if (string.IsNullOrEmpty(dir))
-                        return null;
-                    var path = Path.Combine(dir, "Newtonsoft.Json.dll");
-                    return File.Exists(path) ? Assembly.LoadFrom(path) : null;
-                }
-                catch
-                {
-                    return null;
-                }
-            };
+            AppDomain.CurrentDomain.AssemblyResolve += OnAssemblyResolveNewtonsoftJson;
+            TryPreloadNewtonsoftJson();
             return null;
+        }
+
+        private static void TryPreloadNewtonsoftJson()
+        {
+            try
+            {
+                var dir = GetPluginAssemblyDirectory();
+                if (string.IsNullOrEmpty(dir))
+                    return;
+                var path = Path.Combine(dir, "Newtonsoft.Json.dll");
+                if (!File.Exists(path))
+                    return;
+                Assembly.Load(File.ReadAllBytes(path));
+            }
+            catch
+            {
+                // OnAssemblyResolve will retry when JSON is first used
+            }
+        }
+
+        private static Assembly OnAssemblyResolveNewtonsoftJson(object sender, ResolveEventArgs args)
+        {
+            try
+            {
+                var want = new AssemblyName(args.Name);
+                if (!string.Equals(want.Name, "Newtonsoft.Json", StringComparison.OrdinalIgnoreCase))
+                    return null;
+                foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    if (string.Equals(a.GetName().Name, "Newtonsoft.Json", StringComparison.OrdinalIgnoreCase))
+                        return a;
+                }
+
+                var dir = GetPluginAssemblyDirectory();
+                if (string.IsNullOrEmpty(dir))
+                    return null;
+                var path = Path.Combine(dir, "Newtonsoft.Json.dll");
+                if (!File.Exists(path))
+                    return null;
+                return Assembly.Load(File.ReadAllBytes(path));
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Folder containing Pulse.dll. Location can be empty in some hosts; CodeBase is the fallback.
+        /// </summary>
+        private static string GetPluginAssemblyDirectory()
+        {
+            try
+            {
+                var asm = typeof(Pulse).Assembly;
+                if (!string.IsNullOrEmpty(asm.Location))
+                {
+                    var dir = Path.GetDirectoryName(asm.Location);
+                    if (!string.IsNullOrEmpty(dir))
+                        return dir;
+                }
+
+                if (!string.IsNullOrEmpty(asm.CodeBase))
+                {
+                    var uri = new Uri(asm.CodeBase);
+                    var dir = Path.GetDirectoryName(uri.LocalPath);
+                    if (!string.IsNullOrEmpty(dir))
+                        return dir;
+                }
+            }
+            catch
+            {
+            }
+
+            return string.Empty;
         }
 
         private static readonly ILogger logger = LogManager.GetLogger();
