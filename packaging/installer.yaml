@@ -5,7 +5,7 @@ Packages:
     ReleaseDate: 2026-05-04
     PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.1.0/PlayLog-v1.1.0.pext
     Changelog:
-      - Game Activity historic session import (requires PlayLog server support); startup batch POST to PlayLog API
+      - Imports past play sessions from the Game Activity extension into PlayLog when you next start Playnite (if Game Activity is installed)
   - Version: 1.0.0
     RequiredApiVersion: 6.2.0
     ReleaseDate: 2026-04-20
