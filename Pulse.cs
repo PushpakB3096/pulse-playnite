@@ -17,6 +17,7 @@ namespace Pulse
         private static readonly ILogger logger = LogManager.GetLogger();
         private readonly IDialogsFactory dialogs;
         private readonly PulseAccountClient client;
+        private readonly GameActivitySessionImporter gaImporter;
 
         private readonly PulseSettingsViewModel settings;
         private readonly List<Guid> gameIdsToUpdate = new List<Guid>();
@@ -35,6 +36,10 @@ namespace Pulse
             dialogs = api.Dialogs;
             settings = new PulseSettingsViewModel(this);
             client = new PulseAccountClient(api, () => settings.Settings.PlayLogBearerToken?.Trim() ?? string.Empty);
+            gaImporter = new GameActivitySessionImporter(
+                api,
+                client,
+                () => settings.Settings.PlayLogBearerToken?.Trim() ?? string.Empty);
             var sessionQueuePath = Path.Combine(GetPluginUserDataPath(), "pulse-session-queue.jsonl");
             sessionQueue = new SessionSyncQueue(sessionQueuePath, client);
             PlayniteApi.Database.Games.ItemUpdated += Games_ItemUpdated;
@@ -406,6 +411,8 @@ namespace Pulse
             {
                 logger.Error(ex, "PlayLog: session queue drain on startup failed.");
             }
+
+            _ = gaImporter.RunAsync();
         }
 
         public override void OnApplicationStopped(OnApplicationStoppedEventArgs args)

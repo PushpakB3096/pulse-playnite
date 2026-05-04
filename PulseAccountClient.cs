@@ -24,6 +24,7 @@ public class PulseAccountClient
     private readonly string sessionStopEndpoint;
     private readonly string pairingStartEndpoint;
     private readonly string pairingStatusPrefix;
+    private readonly string sessionImportGameActivityEndpoint;
 
     public PulseAccountClient(IPlayniteAPI api, Func<string> getBearerToken)
     {
@@ -38,6 +39,8 @@ public class PulseAccountClient
         sessionStopEndpoint = baseUrlClean + "/api/sessions/stop";
         pairingStartEndpoint = baseUrlClean + "/api/pairing/start";
         pairingStatusPrefix = baseUrlClean + "/api/pairing/";
+        sessionImportGameActivityEndpoint =
+            baseUrlClean + "/api/sessions/import/game-activity";
     }
 
     private void ApplyBearer(HttpRequestMessage req)
@@ -116,6 +119,71 @@ public class PulseAccountClient
         logger.Info("PlayLog: session stop posted for clientSessionId=" + dto.ClientSessionId);
     }
 
+    public async Task<GameActivityImportBatchResult> PostGameActivityImportBatchAsync(
+        GameActivityImportBatchDto dto)
+    {
+        if (dto == null || dto.Sessions == null || dto.Sessions.Count == 0)
+        {
+            logger.Info("PlayLog: GA import batch empty; skipping POST.");
+            return new GameActivityImportBatchResult();
+        }
+
+        var json = JsonConvert.SerializeObject(dto);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        var req = new HttpRequestMessage(HttpMethod.Post, sessionImportGameActivityEndpoint);
+        req.Content = content;
+        ApplyBearer(req);
+
+        HttpResponseMessage resp;
+        try
+        {
+            resp = await http.SendAsync(req).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.Warn(ex, "PlayLog: HTTP GA import batch failed.");
+            return null;
+        }
+
+        var responseBody = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+        if (!resp.IsSuccessStatusCode)
+        {
+            logger.Warn(
+                "PlayLog: GA import batch responded with "
+                    + resp.StatusCode
+                    + ": "
+                    + responseBody);
+            return null;
+        }
+
+        try
+        {
+            var env =
+                JsonConvert.DeserializeObject<ApiEnvelope<GameActivityImportResponseData>>(
+                    responseBody);
+            var counts = env?.Data?.Counts;
+            if (counts == null)
+            {
+                return new GameActivityImportBatchResult();
+            }
+
+            return new GameActivityImportBatchResult
+            {
+                Inserted = counts.Inserted,
+                SkippedOverlap = counts.SkippedOverlap,
+                SkippedDuplicateIdempotency = counts.SkippedDuplicateIdempotency,
+                Errors = counts.Errors
+            };
+        }
+        catch (Exception ex)
+        {
+            logger.Warn(ex, "PlayLog: failed to parse GA import response.");
+            return new GameActivityImportBatchResult();
+        }
+    }
+
     public class SessionStartDto
     {
         [JsonProperty("clientSessionId")]
@@ -138,6 +206,27 @@ public class PulseAccountClient
 
         [JsonProperty("endTime")]
         public string EndTime { get; set; }
+    }
+
+    private class GameActivityImportResponseData
+    {
+        [JsonProperty("counts")]
+        public GameActivityImportCountsDto Counts { get; set; }
+    }
+
+    private class GameActivityImportCountsDto
+    {
+        [JsonProperty("inserted")]
+        public int Inserted { get; set; }
+
+        [JsonProperty("skipped_overlap")]
+        public int SkippedOverlap { get; set; }
+
+        [JsonProperty("skipped_duplicate_idempotency")]
+        public int SkippedDuplicateIdempotency { get; set; }
+
+        [JsonProperty("errors")]
+        public int Errors { get; set; }
     }
 
     public async Task DeleteGamesByPlayniteIdsAsync(IEnumerable<string> playniteIds)
@@ -349,6 +438,39 @@ public class PulseAccountClient
         public string PluginToken { get; set; }
     }
 
+}
+
+public sealed class GameActivityImportBatchDto
+{
+    [JsonProperty("sessions")]
+    public List<GameActivityImportRowDto> Sessions { get; set; }
+}
+
+public sealed class GameActivityImportRowDto
+{
+    [JsonProperty("clientSessionId")]
+    public string ClientSessionId { get; set; }
+
+    [JsonProperty("playniteId")]
+    public string PlayniteId { get; set; }
+
+    [JsonProperty("startTime")]
+    public string StartTime { get; set; }
+
+    [JsonProperty("endTime")]
+    public string EndTime { get; set; }
+}
+
+public sealed class GameActivityImportBatchResult
+{
+    public int Inserted { get; set; }
+    public int SkippedOverlap { get; set; }
+    public int SkippedDuplicateIdempotency { get; set; }
+    public int Errors { get; set; }
+}
+
+partial class PulseAccountClient
+{
     private PulseGameDto MapGameToDto(Game game)
     {
         var rd = game.ReleaseDate;
