@@ -63,6 +63,7 @@ jobs:
 
       - name: Install Playnite (Toolbox)
         id: playnite
+        timeout-minutes: 25
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -70,9 +71,21 @@ jobs:
           $asset = $rel.assets | Where-Object { $_.name -match '^Playnite\d+\.exe$' } | Select-Object -First 1
           if (-not $asset) { throw "No Playnite*.exe asset in latest Playnite release." }
           Write-Host "Downloading $($asset.name)"
-          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "Playnite_setup.exe"
-          $p = Start-Process -FilePath ".\Playnite_setup.exe" -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART") -PassThru -Wait
-          if ($p.ExitCode -ne 0) { Write-Warning "Installer exit code $($p.ExitCode)" }
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "Playnite_setup.exe" -TimeoutSec 900
+          $logPath = Join-Path $PWD "playnite-install.log"
+          $installArgs = @(
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            "/SP-",
+            "/CLOSEAPPLICATIONS",
+            "/LOG=$logPath"
+          )
+          Write-Host "Running Playnite installer (silent); log: $logPath"
+          $p = Start-Process -FilePath ".\Playnite_setup.exe" -ArgumentList $installArgs -PassThru -Wait
+          if ($null -ne $p.ExitCode -and $p.ExitCode -ne 0) {
+            Write-Warning "Installer exit code $($p.ExitCode)"
+          }
           Get-Process -Name "Playnite*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           Start-Sleep -Seconds 2
           $candidates = @(
@@ -88,6 +101,14 @@ jobs:
           if (-not $toolbox -or -not (Test-Path $toolbox)) { throw "Toolbox.exe not found after Playnite install." }
           Write-Host "Toolbox=$toolbox"
           "toolbox_path=$toolbox" >> $env:GITHUB_OUTPUT
+
+      - name: Upload Playnite install log on failure
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playnite-install-log
+          path: playnite-install.log
+          if-no-files-found: ignore
 
       - name: Pack .pext
         id: pack
