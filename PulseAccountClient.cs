@@ -9,7 +9,7 @@ using Newtonsoft.Json;
 using Playnite.SDK;
 using Playnite.SDK.Models;
 
-public class PulseAccountClient
+public partial class PulseAccountClient
 {
     private static readonly ILogger logger = LogManager.GetLogger();
 
