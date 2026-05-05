@@ -287,9 +287,15 @@ public partial class PulseAccountClient
             return;
         }
 
+        var hltbBatchCounters = new HltbSyncBatchCounters();
+        var mappedGames = gameList
+            .Select(syncGame => MapGameToDto(syncGame, hltbBatchCounters))
+            .ToList();
+        hltbBatchCounters.LogBatchSummary(logger, gameList.Count, _extensionsDataPath);
+
         var payload = new GamesSyncRequest
         {
-            Games = gameList.Select(MapGameToDto).ToList(),
+            Games = mappedGames,
             FullLibrarySync = fullLibrarySync
         };
 
@@ -485,9 +491,9 @@ public sealed class GameHltbDataDto
 
 partial class PulseAccountClient
 {
-    private PulseGameDto MapGameToDto(Game game)
+    private PulseGameDto MapGameToDto(Game game, HltbSyncBatchCounters hltbBatchCounters)
     {
-        var rd = game.ReleaseDate;
+        var releaseDate = game.ReleaseDate;
 
         var dto = new PulseGameDto
         {
@@ -516,12 +522,12 @@ partial class PulseAccountClient
             Added = game.Added,
             Modified = game.Modified,
             LastPlayedAt = game.LastActivity,
-            ReleaseDate = rd.HasValue && rd.Value.Year > 0
+            ReleaseDate = releaseDate.HasValue && releaseDate.Value.Year > 0
                 ? new ReleaseDateDto
                 {
-                    Year = rd.Value.Year,
-                    Month = rd.Value.Month,
-                    Day = rd.Value.Day,
+                    Year = releaseDate.Value.Year,
+                    Month = releaseDate.Value.Month,
+                    Day = releaseDate.Value.Day,
                 }
                 : null,
 
@@ -584,7 +590,10 @@ partial class PulseAccountClient
             UseGlobalGameStartedScript = game.UseGlobalGameStartedScript
         };
 
-        var hltbData = HltbExtensionGameDataReader.TryRead(_extensionsDataPath, game.Id);
+        var hltbData = HltbExtensionGameDataReader.TryRead(
+            _extensionsDataPath,
+            game.Id,
+            hltbBatchCounters);
         if (hltbData != null)
             dto.HltbData = hltbData;
 
