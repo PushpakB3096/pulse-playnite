@@ -55,6 +55,8 @@
   <ItemGroup>
     <Compile Include="DeterministicSessionGuid.cs" />
     <Compile Include="GaGameActivitiesDto.cs" />
+    <Compile Include="HltbExtensionPaths.cs" />
+    <Compile Include="HltbExtensionGameDataReader.cs" />
     <Compile Include="GameActivitySessionImporter.cs" />
     <Compile Include="Pulse.cs" />
     <Compile Include="PulseAccountClient.cs" />

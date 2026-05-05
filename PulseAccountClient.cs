@@ -18,6 +18,7 @@ public partial class PulseAccountClient
     private static readonly HttpClient http = new HttpClient();
 
     private readonly Func<string> getBearerToken;
+    private readonly string _extensionsDataPath;
     private readonly string gamesSyncEndpoint;
     private readonly string gamesByPlayniteDeletePrefix;
     private readonly string sessionStartEndpoint;
@@ -31,6 +32,7 @@ public partial class PulseAccountClient
         if (api == null)
             throw new ArgumentNullException(nameof(api));
         this.getBearerToken = getBearerToken ?? throw new ArgumentNullException(nameof(getBearerToken));
+        _extensionsDataPath = api.Paths?.ExtensionsDataPath;
 
         var baseUrlClean = BASE_URL.TrimEnd('/');
         gamesSyncEndpoint = baseUrlClean + "/api/games/sync";
@@ -285,9 +287,15 @@ public partial class PulseAccountClient
             return;
         }
 
+        var hltbBatchCounters = new HltbSyncBatchCounters();
+        var mappedGames = gameList
+            .Select(syncGame => MapGameToDto(syncGame, hltbBatchCounters))
+            .ToList();
+        hltbBatchCounters.LogBatchSummary(logger, gameList.Count, _extensionsDataPath);
+
         var payload = new GamesSyncRequest
         {
-            Games = gameList.Select(MapGameToDto).ToList(),
+            Games = mappedGames,
             FullLibrarySync = fullLibrarySync
         };
 
@@ -469,13 +477,25 @@ public sealed class GameActivityImportBatchResult
     public int Errors { get; set; }
 }
 
+public sealed class GameHltbDataDto
+{
+    [JsonProperty("mainStory", NullValueHandling = NullValueHandling.Ignore)]
+    public int? MainStory { get; set; }
+
+    [JsonProperty("mainExtra", NullValueHandling = NullValueHandling.Ignore)]
+    public int? MainExtra { get; set; }
+
+    [JsonProperty("completionist", NullValueHandling = NullValueHandling.Ignore)]
+    public int? Completionist { get; set; }
+}
+
 partial class PulseAccountClient
 {
-    private PulseGameDto MapGameToDto(Game game)
+    private PulseGameDto MapGameToDto(Game game, HltbSyncBatchCounters hltbBatchCounters)
     {
-        var rd = game.ReleaseDate;
+        var releaseDate = game.ReleaseDate;
 
-        return new PulseGameDto
+        var dto = new PulseGameDto
         {
             PlayniteId = game.Id.ToString(),
             Name = game.Name,
@@ -502,12 +522,12 @@ partial class PulseAccountClient
             Added = game.Added,
             Modified = game.Modified,
             LastPlayedAt = game.LastActivity,
-            ReleaseDate = rd.HasValue && rd.Value.Year > 0
+            ReleaseDate = releaseDate.HasValue && releaseDate.Value.Year > 0
                 ? new ReleaseDateDto
                 {
-                    Year = rd.Value.Year,
-                    Month = rd.Value.Month,
-                    Day = rd.Value.Day,
+                    Year = releaseDate.Value.Year,
+                    Month = releaseDate.Value.Month,
+                    Day = releaseDate.Value.Day,
                 }
                 : null,
 
@@ -569,6 +589,15 @@ partial class PulseAccountClient
             UseGlobalPostScript = game.UseGlobalPostScript,
             UseGlobalGameStartedScript = game.UseGlobalGameStartedScript
         };
+
+        var hltbData = HltbExtensionGameDataReader.TryRead(
+            _extensionsDataPath,
+            game.Id,
+            hltbBatchCounters);
+        if (hltbData != null)
+            dto.HltbData = hltbData;
+
+        return dto;
     }
 
     private class GamesSyncRequest
@@ -842,5 +871,8 @@ partial class PulseAccountClient
 
         [JsonProperty("useGlobalGameStartedScript")]
         public bool UseGlobalGameStartedScript { get; set; }
+
+        [JsonProperty("hltbData", NullValueHandling = NullValueHandling.Ignore)]
+        public GameHltbDataDto HltbData { get; set; }
     }
 }
