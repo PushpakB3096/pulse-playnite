@@ -5,7 +5,9 @@ Packages:
     ReleaseDate: 2026-05-06
     PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.2.0/PlayLog-v1.2.0.pext
     Changelog:
-      - Skips library and session sync HTTP when PlayLog is not linked, with Info-level logs; manual “Sync all games” shows a short reminder if unlinked (no anonymous API calls)
+      - HowLongToBeat playtime info can travel with your library sync when that extension is installed; clearer behavior when a game cannot be read.
+      - Full library sync runs in steadier steps so large collections stay reliable.
+      - If PlayLog is not linked yet, the extension avoids weak sync attempts; you get a short note if you try syncing everything before finishing setup.
   - Version: 1.1.0
     RequiredApiVersion: 6.2.0
     ReleaseDate: 2026-05-04
