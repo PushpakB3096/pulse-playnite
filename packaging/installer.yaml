@@ -1,5 +1,11 @@
 AddonId: Pulse_d1ac11bf-1668-455f-ad91-6fdb334a54c5
 Packages:
+  - Version: 1.2.0
+    RequiredApiVersion: 6.2.0
+    ReleaseDate: 2026-05-06
+    PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.2.0/PlayLog-v1.2.0.pext
+    Changelog:
+      - Skips library and session sync HTTP when PlayLog is not linked, with Info-level logs; manual “Sync all games” shows a short reminder if unlinked (no anonymous API calls)
   - Version: 1.1.0
     RequiredApiVersion: 6.2.0
     ReleaseDate: 2026-05-04
