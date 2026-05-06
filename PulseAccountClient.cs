@@ -60,6 +60,12 @@ public partial class PulseAccountClient
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", t.Trim());
     }
 
+    private bool HasBearerToken()
+    {
+        var token = getBearerToken != null ? getBearerToken.Invoke() : null;
+        return !string.IsNullOrWhiteSpace(token);
+    }
+
     public async Task PostSessionStartAsync(SessionStartDto dto)
     {
         if (dto == null)
@@ -240,6 +246,12 @@ public partial class PulseAccountClient
 
     public async Task DeleteGamesByPlayniteIdsAsync(IEnumerable<string> playniteIds)
     {
+        if (!HasBearerToken())
+        {
+            logger.Info("PlayLog: skip delete by playnite — not linked");
+            return;
+        }
+
         var ids = playniteIds != null
             ? playniteIds.Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id.Trim()).Distinct().ToList()
             : new List<string>();
@@ -291,6 +303,12 @@ public partial class PulseAccountClient
         if (gameList.Count == 0)
         {
             logger.Info("PlayLog: SyncGamesAsync called with 0 games.");
+            return;
+        }
+
+        if (!HasBearerToken())
+        {
+            logger.Info("PlayLog: skip library sync — not linked");
             return;
         }
 
