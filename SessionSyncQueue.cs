@@ -17,12 +17,14 @@ namespace Pulse
 
         private readonly string queuePath;
         private readonly PulseAccountClient client;
+        private readonly Func<string> getBearerToken;
         private readonly object fileLock = new object();
 
-        public SessionSyncQueue(string queueFilePath, PulseAccountClient accountClient)
+        public SessionSyncQueue(string queueFilePath, PulseAccountClient accountClient, Func<string> getBearerToken)
         {
             queuePath = queueFilePath ?? throw new ArgumentNullException(nameof(queueFilePath));
             client = accountClient ?? throw new ArgumentNullException(nameof(accountClient));
+            this.getBearerToken = getBearerToken ?? throw new ArgumentNullException(nameof(getBearerToken));
         }
 
         public void EnqueueStart(string clientSessionId, string playniteId, DateTime startTimeUtc)
@@ -68,6 +70,13 @@ namespace Pulse
         /// </summary>
         public void TryDrainAll()
         {
+            var bearerToken = getBearerToken != null ? getBearerToken.Invoke() : null;
+            if (string.IsNullOrWhiteSpace(bearerToken))
+            {
+                logger.Info("PlayLog: skip session sync — not linked");
+                return;
+            }
+
             lock (fileLock)
             {
                 if (!File.Exists(queuePath))

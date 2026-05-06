@@ -17,8 +17,14 @@ public partial class PulseAccountClient
 
     private static readonly HttpClient http = new HttpClient();
 
+    private const int GamesSyncBatchSize = 300;
+    private const string GamesSyncV2Query = "?syncVersion=2";
+
     private readonly Func<string> getBearerToken;
+    private readonly string _extensionsDataPath;
     private readonly string gamesSyncEndpoint;
+    private readonly string gamesSyncEndpointV2;
+    private readonly string gamesSyncCompleteEndpointV2;
     private readonly string gamesByPlayniteDeletePrefix;
     private readonly string sessionStartEndpoint;
     private readonly string sessionStopEndpoint;
@@ -31,9 +37,12 @@ public partial class PulseAccountClient
         if (api == null)
             throw new ArgumentNullException(nameof(api));
         this.getBearerToken = getBearerToken ?? throw new ArgumentNullException(nameof(getBearerToken));
+        _extensionsDataPath = api.Paths?.ExtensionsDataPath;
 
         var baseUrlClean = BASE_URL.TrimEnd('/');
         gamesSyncEndpoint = baseUrlClean + "/api/games/sync";
+        gamesSyncEndpointV2 = gamesSyncEndpoint + GamesSyncV2Query;
+        gamesSyncCompleteEndpointV2 = baseUrlClean + "/api/games/sync/complete" + GamesSyncV2Query;
         gamesByPlayniteDeletePrefix = baseUrlClean + "/api/games/by-playnite/";
         sessionStartEndpoint = baseUrlClean + "/api/sessions/start";
         sessionStopEndpoint = baseUrlClean + "/api/sessions/stop";
@@ -49,6 +58,12 @@ public partial class PulseAccountClient
         if (string.IsNullOrWhiteSpace(t))
             return;
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", t.Trim());
+    }
+
+    private bool HasBearerToken()
+    {
+        var token = getBearerToken != null ? getBearerToken.Invoke() : null;
+        return !string.IsNullOrWhiteSpace(token);
     }
 
     public async Task PostSessionStartAsync(SessionStartDto dto)
@@ -231,6 +246,12 @@ public partial class PulseAccountClient
 
     public async Task DeleteGamesByPlayniteIdsAsync(IEnumerable<string> playniteIds)
     {
+        if (!HasBearerToken())
+        {
+            logger.Info("PlayLog: skip delete by playnite — not linked");
+            return;
+        }
+
         var ids = playniteIds != null
             ? playniteIds.Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id.Trim()).Distinct().ToList()
             : new List<string>();
@@ -285,27 +306,102 @@ public partial class PulseAccountClient
             return;
         }
 
-        var payload = new GamesSyncRequest
+        if (!HasBearerToken())
         {
-            Games = gameList.Select(MapGameToDto).ToList(),
-            FullLibrarySync = fullLibrarySync
+            logger.Info("PlayLog: skip library sync — not linked");
+            return;
+        }
+
+        var hltbBatchCounters = new HltbSyncBatchCounters();
+        var totalGames = gameList.Count;
+        var batchCount = (totalGames + GamesSyncBatchSize - 1) / GamesSyncBatchSize;
+        var syncRunId = Guid.NewGuid().ToString();
+
+        for (var syncBatchIndex = 0; syncBatchIndex < batchCount; syncBatchIndex++)
+        {
+            var skip = syncBatchIndex * GamesSyncBatchSize;
+            var batchSize = Math.Min(GamesSyncBatchSize, totalGames - skip);
+            var batchGames = gameList.GetRange(skip, batchSize);
+            var payload = new GamesSyncRequest
+            {
+                Games = batchGames
+                    .Select(syncGame => MapGameToDto(syncGame, hltbBatchCounters))
+                    .ToList(),
+                FullLibrarySync = false,
+                SyncRun = new SyncRunDto
+                {
+                    RunId = syncRunId,
+                    BatchIndex = syncBatchIndex,
+                    BatchCount = batchCount,
+                    TotalGames = totalGames
+                }
+            };
+
+            var json = JsonConvert.SerializeObject(payload);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var httpReq = new HttpRequestMessage(HttpMethod.Post, gamesSyncEndpointV2);
+            httpReq.Content = content;
+            ApplyBearer(httpReq);
+
+            HttpResponseMessage resp;
+            try
+            {
+                resp = await http.SendAsync(httpReq).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "PlayLog: HTTP request to games/sync failed.");
+                throw;
+            }
+
+            var responseBody = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                logger.Error("PlayLog: backend responded with " + resp.StatusCode + ": " + responseBody);
+                throw new Exception("PlayLog backend error: " + resp.StatusCode);
+            }
+        }
+
+        hltbBatchCounters.LogBatchSummary(logger, gameList.Count, _extensionsDataPath);
+
+        if (fullLibrarySync)
+        {
+            var playniteIds = gameList.Select(libraryGame => libraryGame.Id.ToString()).Distinct().ToList();
+            await PostGamesSyncCompleteAsync(syncRunId, playniteIds).ConfigureAwait(false);
+        }
+
+        logger.Info("PlayLog: successfully synced " + gameList.Count + " game(s).");
+    }
+
+    private async Task PostGamesSyncCompleteAsync(string syncRunId, IReadOnlyList<string> playniteIds)
+    {
+        if (string.IsNullOrWhiteSpace(syncRunId))
+        {
+            throw new ArgumentException("syncRunId is required", nameof(syncRunId));
+        }
+
+        var payload = new GamesSyncCompleteRequest
+        {
+            PlayniteIds = playniteIds != null ? playniteIds.ToList() : new List<string>(),
+            PruneMissing = true,
+            SyncRun = new GamesSyncCompleteRunDto { RunId = syncRunId }
         };
 
         var json = JsonConvert.SerializeObject(payload);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-        var req = new HttpRequestMessage(HttpMethod.Post, gamesSyncEndpoint);
-        req.Content = content;
-        ApplyBearer(req);
+        var httpReq = new HttpRequestMessage(HttpMethod.Post, gamesSyncCompleteEndpointV2);
+        httpReq.Content = content;
+        ApplyBearer(httpReq);
 
         HttpResponseMessage resp;
         try
         {
-            resp = await http.SendAsync(req).ConfigureAwait(false);
+            resp = await http.SendAsync(httpReq).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            logger.Error(ex, "PlayLog: HTTP request to games/sync failed.");
+            logger.Error(ex, "PlayLog: HTTP request to games/sync/complete failed.");
             throw;
         }
 
@@ -313,11 +409,9 @@ public partial class PulseAccountClient
 
         if (!resp.IsSuccessStatusCode)
         {
-            logger.Error("PlayLog: backend responded with " + resp.StatusCode + ": " + responseBody);
+            logger.Error("PlayLog: sync/complete responded with " + resp.StatusCode + ": " + responseBody);
             throw new Exception("PlayLog backend error: " + resp.StatusCode);
         }
-
-        logger.Info("PlayLog: successfully synced " + gameList.Count + " game(s).");
     }
 
     public async Task<PairingStartResult> StartPairingAsync()
@@ -469,13 +563,25 @@ public sealed class GameActivityImportBatchResult
     public int Errors { get; set; }
 }
 
+public sealed class GameHltbDataDto
+{
+    [JsonProperty("mainStory", NullValueHandling = NullValueHandling.Ignore)]
+    public int? MainStory { get; set; }
+
+    [JsonProperty("mainExtra", NullValueHandling = NullValueHandling.Ignore)]
+    public int? MainExtra { get; set; }
+
+    [JsonProperty("completionist", NullValueHandling = NullValueHandling.Ignore)]
+    public int? Completionist { get; set; }
+}
+
 partial class PulseAccountClient
 {
-    private PulseGameDto MapGameToDto(Game game)
+    private PulseGameDto MapGameToDto(Game game, HltbSyncBatchCounters hltbBatchCounters)
     {
-        var rd = game.ReleaseDate;
+        var releaseDate = game.ReleaseDate;
 
-        return new PulseGameDto
+        var dto = new PulseGameDto
         {
             PlayniteId = game.Id.ToString(),
             Name = game.Name,
@@ -502,12 +608,12 @@ partial class PulseAccountClient
             Added = game.Added,
             Modified = game.Modified,
             LastPlayedAt = game.LastActivity,
-            ReleaseDate = rd.HasValue && rd.Value.Year > 0
+            ReleaseDate = releaseDate.HasValue && releaseDate.Value.Year > 0
                 ? new ReleaseDateDto
                 {
-                    Year = rd.Value.Year,
-                    Month = rd.Value.Month,
-                    Day = rd.Value.Day,
+                    Year = releaseDate.Value.Year,
+                    Month = releaseDate.Value.Month,
+                    Day = releaseDate.Value.Day,
                 }
                 : null,
 
@@ -569,6 +675,30 @@ partial class PulseAccountClient
             UseGlobalPostScript = game.UseGlobalPostScript,
             UseGlobalGameStartedScript = game.UseGlobalGameStartedScript
         };
+
+        var hltbData = HltbExtensionGameDataReader.TryRead(
+            _extensionsDataPath,
+            game.Id,
+            hltbBatchCounters);
+        if (hltbData != null)
+            dto.HltbData = hltbData;
+
+        return dto;
+    }
+
+    private class SyncRunDto
+    {
+        [JsonProperty("runId")]
+        public string RunId { get; set; }
+
+        [JsonProperty("batchIndex")]
+        public int BatchIndex { get; set; }
+
+        [JsonProperty("batchCount")]
+        public int BatchCount { get; set; }
+
+        [JsonProperty("totalGames")]
+        public int TotalGames { get; set; }
     }
 
     private class GamesSyncRequest
@@ -578,6 +708,27 @@ partial class PulseAccountClient
 
         [JsonProperty("fullLibrarySync")]
         public bool FullLibrarySync { get; set; }
+
+        [JsonProperty("syncRun")]
+        public SyncRunDto SyncRun { get; set; }
+    }
+
+    private class GamesSyncCompleteRunDto
+    {
+        [JsonProperty("runId")]
+        public string RunId { get; set; }
+    }
+
+    private class GamesSyncCompleteRequest
+    {
+        [JsonProperty("playniteIds")]
+        public List<string> PlayniteIds { get; set; }
+
+        [JsonProperty("pruneMissing")]
+        public bool PruneMissing { get; set; }
+
+        [JsonProperty("syncRun")]
+        public GamesSyncCompleteRunDto SyncRun { get; set; }
     }
 
     private class ReleaseDateDto
@@ -842,5 +993,8 @@ partial class PulseAccountClient
 
         [JsonProperty("useGlobalGameStartedScript")]
         public bool UseGlobalGameStartedScript { get; set; }
+
+        [JsonProperty("hltbData", NullValueHandling = NullValueHandling.Ignore)]
+        public GameHltbDataDto HltbData { get; set; }
     }
 }

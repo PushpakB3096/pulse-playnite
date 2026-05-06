@@ -41,7 +41,10 @@ namespace Pulse
                 client,
                 () => settings.Settings.PlayLogBearerToken?.Trim() ?? string.Empty);
             var sessionQueuePath = Path.Combine(GetPluginUserDataPath(), "pulse-session-queue.jsonl");
-            sessionQueue = new SessionSyncQueue(sessionQueuePath, client);
+            sessionQueue = new SessionSyncQueue(
+                sessionQueuePath,
+                client,
+                () => settings.Settings.PlayLogBearerToken?.Trim() ?? string.Empty);
             PlayniteApi.Database.Games.ItemUpdated += Games_ItemUpdated;
             PlayniteApi.Database.Games.ItemCollectionChanged += Games_ItemCollectionChanged;
 
@@ -122,6 +125,15 @@ namespace Pulse
 
         private void SyncAllGames()
         {
+            if (!settings.IsPlayLogLinked)
+            {
+                logger.Info("PlayLog: skip library sync — not linked");
+                dialogs.ShowMessage(
+                    "Link PlayLog in extension settings before syncing your library.",
+                    "PlayLog");
+                return;
+            }
+
             List<Game> allGames;
             try
             {
@@ -239,6 +251,12 @@ namespace Pulse
 
             if (!settings.Settings.AutoSyncLibrary)
             {
+                return;
+            }
+
+            if (!settings.IsPlayLogLinked)
+            {
+                logger.Info("PlayLog: skip library sync — not linked");
                 return;
             }
 
