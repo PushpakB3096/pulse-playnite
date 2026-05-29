@@ -20,6 +20,7 @@ public partial class PulseAccountClient
     private const int GamesSyncBatchSize = 300;
     private const string GamesSyncV2Query = "?syncVersion=2";
 
+    private readonly IPlayniteAPI playniteApi;
     private readonly Func<string> getBearerToken;
     private readonly string _extensionsDataPath;
     private readonly string gamesSyncEndpoint;
@@ -36,10 +37,12 @@ public partial class PulseAccountClient
     {
         if (api == null)
             throw new ArgumentNullException(nameof(api));
+        playniteApi = api;
         this.getBearerToken = getBearerToken ?? throw new ArgumentNullException(nameof(getBearerToken));
         _extensionsDataPath = api.Paths?.ExtensionsDataPath;
 
         var baseUrlClean = BASE_URL.TrimEnd('/');
+        InitializeCoverEndpoints(baseUrlClean);
         gamesSyncEndpoint = baseUrlClean + "/api/games/sync";
         gamesSyncEndpointV2 = gamesSyncEndpoint + GamesSyncV2Query;
         gamesSyncCompleteEndpointV2 = baseUrlClean + "/api/games/sync/complete" + GamesSyncV2Query;
@@ -297,25 +300,33 @@ public partial class PulseAccountClient
         logger.Info("PlayLog: successfully processed " + ids.Count + " delete(s) by playnite id.");
     }
 
-    public async Task SyncGamesAsync(IEnumerable<Game> games, bool fullLibrarySync = false)
+    partial void InitializeCoverEndpoints(string baseUrlClean);
+
+    public void SetIncludePlayniteCoversInSync(bool enabled)
+    {
+        includePlayniteCoversInSync = enabled;
+    }
+
+    public async Task<IReadOnlyList<string>> SyncGamesAsync(IEnumerable<Game> games, bool fullLibrarySync = false)
     {
         var gameList = games != null ? games.ToList() : new List<Game>();
         if (gameList.Count == 0)
         {
             logger.Info("PlayLog: SyncGamesAsync called with 0 games.");
-            return;
+            return Array.Empty<string>();
         }
 
         if (!HasBearerToken())
         {
             logger.Info("PlayLog: skip library sync — not linked");
-            return;
+            return Array.Empty<string>();
         }
 
         var hltbBatchCounters = new HltbSyncBatchCounters();
         var totalGames = gameList.Count;
         var batchCount = (totalGames + GamesSyncBatchSize - 1) / GamesSyncBatchSize;
         var syncRunId = Guid.NewGuid().ToString();
+        var allCoversNeedingUpload = new List<string>();
 
         for (var syncBatchIndex = 0; syncBatchIndex < batchCount; syncBatchIndex++)
         {
@@ -361,6 +372,8 @@ public partial class PulseAccountClient
                 logger.Error("PlayLog: backend responded with " + resp.StatusCode + ": " + responseBody);
                 throw new Exception("PlayLog backend error: " + resp.StatusCode);
             }
+
+            allCoversNeedingUpload.AddRange(ParseCoversNeedingUpload(responseBody));
         }
 
         hltbBatchCounters.LogBatchSummary(logger, gameList.Count, _extensionsDataPath);
@@ -372,6 +385,10 @@ public partial class PulseAccountClient
         }
 
         logger.Info("PlayLog: successfully synced " + gameList.Count + " game(s).");
+        return allCoversNeedingUpload
+            .Where(playniteId => !string.IsNullOrWhiteSpace(playniteId))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private async Task PostGamesSyncCompleteAsync(string syncRunId, IReadOnlyList<string> playniteIds)
@@ -682,6 +699,8 @@ partial class PulseAccountClient
             hltbBatchCounters);
         if (hltbData != null)
             dto.HltbData = hltbData;
+
+        AttachPlayniteCoverMetadata(dto, game);
 
         return dto;
     }
@@ -996,5 +1015,26 @@ partial class PulseAccountClient
 
         [JsonProperty("hltbData", NullValueHandling = NullValueHandling.Ignore)]
         public GameHltbDataDto HltbData { get; set; }
+
+        [JsonProperty("playniteCover", NullValueHandling = NullValueHandling.Ignore)]
+        public PlayniteCoverSyncDto PlayniteCover { get; set; }
+    }
+
+    public sealed class PlayniteCoverSyncDto
+    {
+        [JsonProperty("hash", NullValueHandling = NullValueHandling.Ignore)]
+        public string Hash { get; set; }
+
+        [JsonProperty("byteSize", NullValueHandling = NullValueHandling.Ignore)]
+        public long? ByteSize { get; set; }
+
+        [JsonProperty("contentType", NullValueHandling = NullValueHandling.Ignore)]
+        public string ContentType { get; set; }
+
+        [JsonProperty("sourceKind")]
+        public string SourceKind { get; set; }
+
+        [JsonProperty("url", NullValueHandling = NullValueHandling.Ignore)]
+        public string Url { get; set; }
     }
 }

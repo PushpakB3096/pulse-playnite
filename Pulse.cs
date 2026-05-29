@@ -28,8 +28,12 @@ namespace Pulse
         private readonly Dictionary<Guid, string> activeSessionByGameId = new Dictionary<Guid, string>();
         private readonly object sessionMapLock = new object();
         private readonly SessionSyncQueue sessionQueue;
+        private readonly CoverUploadQueue coverUploadQueue;
+        private readonly System.Timers.Timer coverDrainTimer;
 
         public override Guid Id { get; } = Guid.Parse("d1ac11bf-1668-455f-ad91-6fdb334a54c5");
+
+        public CoverUploadQueue CoverUploadQueueInstance => coverUploadQueue;
 
         public Pulse(IPlayniteAPI api) : base(api)
         {
@@ -45,6 +49,15 @@ namespace Pulse
                 sessionQueuePath,
                 client,
                 () => settings.Settings.PlayLogBearerToken?.Trim() ?? string.Empty);
+            var coverQueuePath = Path.Combine(GetPluginUserDataPath(), "pulse-cover-upload-queue.jsonl");
+            coverUploadQueue = new CoverUploadQueue(
+                coverQueuePath,
+                client,
+                () => settings.Settings.PlayLogBearerToken?.Trim() ?? string.Empty);
+            coverDrainTimer = new System.Timers.Timer(60000);
+            coverDrainTimer.AutoReset = true;
+            coverDrainTimer.Elapsed += (_, __) => KickCoverUploadDrain();
+            coverDrainTimer.Start();
             PlayniteApi.Database.Games.ItemUpdated += Games_ItemUpdated;
             PlayniteApi.Database.Games.ItemCollectionChanged += Games_ItemCollectionChanged;
 
@@ -152,7 +165,8 @@ namespace Pulse
                     args.Text = $"PlayLog: Syncing {allGames.Count} games...";
                     try
                     {
-                        client.SyncGamesAsync(allGames, fullLibrarySync: true).GetAwaiter().GetResult();
+                        var coversNeedingUpload = RunLibraryMetadataSync(allGames, fullLibrarySync: true);
+                        FinishLibrarySyncWithCoverUpload(coversNeedingUpload);
                     }
                     catch (Exception ex)
                     {
@@ -337,9 +351,70 @@ namespace Pulse
 
                 if (games.Count > 0)
                 {
-                    client.SyncGamesAsync(games, fullLibrarySync: false).GetAwaiter().GetResult();
+                    var coversNeedingUpload = RunLibraryMetadataSync(games, fullLibrarySync: false);
+                    FinishLibrarySyncWithCoverUpload(coversNeedingUpload);
                 }
             }
+        }
+
+        private IReadOnlyList<string> RunLibraryMetadataSync(IEnumerable<Game> games, bool fullLibrarySync)
+        {
+            var syncPlayniteCovers = client.GetSyncPlayniteCoversAsync().GetAwaiter().GetResult();
+            client.SetIncludePlayniteCoversInSync(syncPlayniteCovers);
+            return client.SyncGamesAsync(games, fullLibrarySync).GetAwaiter().GetResult();
+        }
+
+        private void FinishLibrarySyncWithCoverUpload(IReadOnlyList<string> coversNeedingUpload)
+        {
+            if (coversNeedingUpload == null || coversNeedingUpload.Count == 0)
+            {
+                KickCoverUploadDrain();
+                return;
+            }
+
+            foreach (var playniteId in coversNeedingUpload)
+            {
+                if (string.IsNullOrWhiteSpace(playniteId))
+                {
+                    continue;
+                }
+
+                if (!Guid.TryParse(playniteId, out var gameGuid))
+                {
+                    continue;
+                }
+
+                var game = PlayniteApi.Database.Games.Get(gameGuid);
+                if (game == null)
+                {
+                    continue;
+                }
+
+                var metadata = PlayniteCoverReader.TryRead(PlayniteApi, game);
+                coverUploadQueue.Enqueue(metadata, playniteId);
+            }
+
+            KickCoverUploadDrain();
+        }
+
+        private void KickCoverUploadDrain()
+        {
+            if (!settings.IsPlayLogLinked)
+            {
+                return;
+            }
+
+            Task.Run(() =>
+            {
+                try
+                {
+                    coverUploadQueue.TryDrainAll();
+                }
+                catch (Exception ex)
+                {
+                    logger.Error(ex, "PlayLog: cover upload queue drain failed.");
+                }
+            });
         }
 
         public override void OnGameInstalled(OnGameInstalledEventArgs args)
@@ -430,6 +505,8 @@ namespace Pulse
                 logger.Error(ex, "PlayLog: session queue drain on startup failed.");
             }
 
+            KickCoverUploadDrain();
+
             _ = gaImporter.RunAsync();
         }
 
@@ -448,6 +525,11 @@ namespace Pulse
 
         public override void OnLibraryUpdated(OnLibraryUpdatedEventArgs args)
         {
+        }
+
+        public async Task<bool> GetSyncPlayniteCoversAsync(bool forceRefresh = false)
+        {
+            return await client.GetSyncPlayniteCoversAsync(forceRefresh).ConfigureAwait(false);
         }
 
         public override ISettings GetSettings(bool firstRunSettings)
