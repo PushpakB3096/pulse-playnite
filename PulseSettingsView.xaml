@@ -27,5 +27,11 @@
                        Text="Link pairs this PC with your PlayLog account. Enter the short code shown here in the PlayLog app on your phone (signed in)."/>
             <Button Margin="0,8,0,0" Content="Link PlayLog account" Click="LinkAccount_Click"/>
         </StackPanel>
+
+        <StackPanel Margin="0,16,0,0" Visibility="{Binding ShowCoverArtSection, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="Cover art"/>
+            <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="Gray"
+                       Text="{Binding CoverUploadStatusText}"/>
+        </StackPanel>
     </StackPanel>
 </UserControl>

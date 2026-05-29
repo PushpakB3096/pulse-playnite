@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Threading;
 
 namespace Pulse
 {
@@ -36,6 +37,8 @@ namespace Pulse
     {
         private readonly Pulse plugin;
         private PulseSettings editingClone { get; set; }
+        private DispatcherTimer coverStatusTimer;
+        private bool syncPlayniteCoversEnabled;
 
         private PulseSettings settings;
         public PulseSettings Settings
@@ -67,6 +70,47 @@ namespace Pulse
         /// <summary>For binding the "not linked" panel without an inverse converter.</summary>
         public bool IsPlayLogNotLinked => !IsPlayLogLinked;
 
+        public bool ShowCoverArtSection => IsPlayLogLinked;
+
+        public bool SyncPlayniteCoversEnabled => syncPlayniteCoversEnabled;
+
+        public int CoverUploadPendingCount =>
+            plugin?.CoverUploadQueueInstance?.PendingCount ?? 0;
+
+        public bool CoverUploadIsDraining =>
+            plugin?.CoverUploadQueueInstance?.IsDraining ?? false;
+
+        public string CoverUploadStatusText
+        {
+            get
+            {
+                if (!IsPlayLogLinked)
+                {
+                    return string.Empty;
+                }
+
+                if (!syncPlayniteCoversEnabled)
+                {
+                    return "PlayLog Plus syncs your Playnite cover art to the mobile app.";
+                }
+
+                var pendingCount = CoverUploadPendingCount;
+                if (CoverUploadIsDraining)
+                {
+                    return pendingCount > 0
+                        ? "Cover upload: Uploading… (" + pendingCount + " remaining)"
+                        : "Cover upload: Uploading…";
+                }
+
+                if (pendingCount > 0)
+                {
+                    return "Cover upload: " + pendingCount + " remaining";
+                }
+
+                return "Cover upload: Up to date";
+            }
+        }
+
         private void Settings_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(PulseSettings.PlayLogBearerToken))
@@ -79,6 +123,72 @@ namespace Pulse
         {
             OnPropertyChanged(nameof(IsPlayLogLinked));
             OnPropertyChanged(nameof(IsPlayLogNotLinked));
+            OnPropertyChanged(nameof(ShowCoverArtSection));
+            NotifyCoverUploadStatusChanged();
+        }
+
+        private void NotifyCoverUploadStatusChanged()
+        {
+            OnPropertyChanged(nameof(CoverUploadPendingCount));
+            OnPropertyChanged(nameof(CoverUploadIsDraining));
+            OnPropertyChanged(nameof(SyncPlayniteCoversEnabled));
+            OnPropertyChanged(nameof(CoverUploadStatusText));
+        }
+
+        private async Task RefreshCoverSyncStatusAsync()
+        {
+            if (!IsPlayLogLinked)
+            {
+                syncPlayniteCoversEnabled = false;
+                NotifyCoverUploadStatusChanged();
+                return;
+            }
+
+            try
+            {
+                syncPlayniteCoversEnabled = await plugin.GetSyncPlayniteCoversAsync().ConfigureAwait(false);
+            }
+            catch
+            {
+                syncPlayniteCoversEnabled = false;
+            }
+
+            NotifyCoverUploadStatusChanged();
+        }
+
+        private void StartCoverStatusTimer()
+        {
+            if (coverStatusTimer != null)
+            {
+                return;
+            }
+
+            coverStatusTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(2)
+            };
+            coverStatusTimer.Tick += (_, __) =>
+            {
+                NotifyCoverUploadStatusChanged();
+                if (CoverUploadPendingCount == 0 && !CoverUploadIsDraining)
+                {
+                    return;
+                }
+
+                _ = RefreshCoverSyncStatusAsync();
+            };
+            coverStatusTimer.Start();
+        }
+
+        private void StopCoverStatusTimer()
+        {
+            if (coverStatusTimer == null)
+            {
+                return;
+            }
+
+            coverStatusTimer.Stop();
+            coverStatusTimer = null;
         }
 
         public PulseSettingsViewModel(Pulse plugin)
@@ -104,12 +214,15 @@ namespace Pulse
         {
             // Code executed when settings view is opened and user starts editing values.
             editingClone = Serialization.GetClone(Settings);
+            _ = RefreshCoverSyncStatusAsync();
+            StartCoverStatusTimer();
         }
 
         public void CancelEdit()
         {
             // Code executed when user decides to cancel any changes made since BeginEdit was called.
             // This method should revert any changes made since BeginEdit.
+            StopCoverStatusTimer();
             Settings = editingClone;
         }
 
@@ -117,6 +230,7 @@ namespace Pulse
         {
             // Code executed when user decides to confirm changes made since BeginEdit was called.
             // This method should save settings made since BeginEdit.
+            StopCoverStatusTimer();
             plugin.SavePluginSettings(Settings);
         }
 
@@ -132,6 +246,7 @@ namespace Pulse
         public async System.Threading.Tasks.Task RunPairingAsync()
         {
             await plugin.RunPairingFlowAsync().ConfigureAwait(false);
+            await RefreshCoverSyncStatusAsync().ConfigureAwait(false);
         }
     }
 }
