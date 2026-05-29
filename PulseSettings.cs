@@ -167,7 +167,7 @@ namespace Pulse
             {
                 Interval = TimeSpan.FromSeconds(2)
             };
-            coverStatusTimer.Tick += async (_, __) =>
+            coverStatusTimer.Tick += (_, __) =>
             {
                 NotifyCoverUploadStatusChanged();
                 if (CoverUploadPendingCount == 0 && !CoverUploadIsDraining)
@@ -175,7 +175,7 @@ namespace Pulse
                     return;
                 }
 
-                await RefreshCoverSyncStatusAsync().ConfigureAwait(false);
+                _ = RefreshCoverSyncStatusAsync();
             };
             coverStatusTimer.Start();
         }

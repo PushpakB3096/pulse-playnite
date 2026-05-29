@@ -33,7 +33,8 @@ namespace Pulse
             }
 
             var trimmed = coverImage.Trim();
-            if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
+            Uri uri;
+            if (Uri.TryCreate(trimmed, UriKind.Absolute, out uri)
                 && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
             {
                 return new PlayniteCoverMetadata

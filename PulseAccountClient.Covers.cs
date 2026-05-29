@@ -9,19 +9,10 @@ using Playnite.SDK.Models;
 
 public partial class PulseAccountClient
 {
-    private readonly string usersMeEndpoint;
-    private readonly string playniteCoverUploadEndpoint;
-
     private bool includePlayniteCoversInSync;
     private bool? syncPlayniteCoversCache;
     private DateTime syncPlayniteCoversCacheAtUtc = DateTime.MinValue;
     private static readonly TimeSpan SyncPlayniteCoversCacheTtl = TimeSpan.FromMinutes(5);
-
-    partial void InitializeCoverEndpoints(string baseUrlClean)
-    {
-        usersMeEndpoint = baseUrlClean + "/api/users/me";
-        playniteCoverUploadEndpoint = baseUrlClean + "/api/games/covers/playnite";
-    }
 
     public async Task<bool> GetSyncPlayniteCoversAsync(bool forceRefresh = false)
     {

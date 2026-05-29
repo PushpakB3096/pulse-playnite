@@ -32,6 +32,8 @@ public partial class PulseAccountClient
     private readonly string pairingStartEndpoint;
     private readonly string pairingStatusPrefix;
     private readonly string sessionImportGameActivityEndpoint;
+    private readonly string usersMeEndpoint;
+    private readonly string playniteCoverUploadEndpoint;
 
     public PulseAccountClient(IPlayniteAPI api, Func<string> getBearerToken)
     {
@@ -42,7 +44,6 @@ public partial class PulseAccountClient
         _extensionsDataPath = api.Paths?.ExtensionsDataPath;
 
         var baseUrlClean = BASE_URL.TrimEnd('/');
-        InitializeCoverEndpoints(baseUrlClean);
         gamesSyncEndpoint = baseUrlClean + "/api/games/sync";
         gamesSyncEndpointV2 = gamesSyncEndpoint + GamesSyncV2Query;
         gamesSyncCompleteEndpointV2 = baseUrlClean + "/api/games/sync/complete" + GamesSyncV2Query;
@@ -53,6 +54,8 @@ public partial class PulseAccountClient
         pairingStatusPrefix = baseUrlClean + "/api/pairing/";
         sessionImportGameActivityEndpoint =
             baseUrlClean + "/api/sessions/import/game-activity";
+        usersMeEndpoint = baseUrlClean + "/api/users/me";
+        playniteCoverUploadEndpoint = baseUrlClean + "/api/games/covers/playnite";
     }
 
     private void ApplyBearer(HttpRequestMessage req)
@@ -300,8 +303,6 @@ public partial class PulseAccountClient
         logger.Info("PlayLog: successfully processed " + ids.Count + " delete(s) by playnite id.");
     }
 
-    partial void InitializeCoverEndpoints(string baseUrlClean);
-
     public void SetIncludePlayniteCoversInSync(bool enabled)
     {
         includePlayniteCoversInSync = enabled;
@@ -313,13 +314,13 @@ public partial class PulseAccountClient
         if (gameList.Count == 0)
         {
             logger.Info("PlayLog: SyncGamesAsync called with 0 games.");
-            return Array.Empty<string>();
+            return new string[0];
         }
 
         if (!HasBearerToken())
         {
             logger.Info("PlayLog: skip library sync — not linked");
-            return Array.Empty<string>();
+            return new string[0];
         }
 
         var hltbBatchCounters = new HltbSyncBatchCounters();

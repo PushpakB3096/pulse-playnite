@@ -379,7 +379,8 @@ namespace Pulse
                     continue;
                 }
 
-                if (!Guid.TryParse(playniteId, out var gameGuid))
+                Guid gameGuid;
+                if (!Guid.TryParse(playniteId, out gameGuid))
                 {
                     continue;
                 }
