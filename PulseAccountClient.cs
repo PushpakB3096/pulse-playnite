@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Playnite.SDK;
 using Playnite.SDK.Models;
+using Pulse;
 
 public partial class PulseAccountClient
 {
@@ -34,13 +35,18 @@ public partial class PulseAccountClient
     private readonly string sessionImportGameActivityEndpoint;
     private readonly string usersMeEndpoint;
     private readonly string playniteCoverUploadEndpoint;
+    private readonly CoverSyncStateStore coverSyncStateStore;
 
-    public PulseAccountClient(IPlayniteAPI api, Func<string> getBearerToken)
+    public PulseAccountClient(
+        IPlayniteAPI api,
+        Func<string> getBearerToken,
+        CoverSyncStateStore coverSyncStateStore)
     {
         if (api == null)
             throw new ArgumentNullException(nameof(api));
         playniteApi = api;
         this.getBearerToken = getBearerToken ?? throw new ArgumentNullException(nameof(getBearerToken));
+        this.coverSyncStateStore = coverSyncStateStore;
         _extensionsDataPath = api.Paths?.ExtensionsDataPath;
 
         var baseUrlClean = BASE_URL.TrimEnd('/');
@@ -386,6 +392,7 @@ public partial class PulseAccountClient
         }
 
         logger.Info("PlayLog: successfully synced " + gameList.Count + " game(s).");
+        coverSyncStateStore?.SaveIfDirty();
         return allCoversNeedingUpload
             .Where(playniteId => !string.IsNullOrWhiteSpace(playniteId))
             .Distinct(StringComparer.OrdinalIgnoreCase)

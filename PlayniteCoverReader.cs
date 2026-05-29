@@ -19,7 +19,10 @@ namespace Pulse
 
     public static class PlayniteCoverReader
     {
-        public static PlayniteCoverMetadata TryRead(IPlayniteAPI api, Game game)
+        public static PlayniteCoverMetadata TryReadForSync(
+            IPlayniteAPI api,
+            Game game,
+            CoverSyncStateStore stateStore)
         {
             if (api == null || game == null)
             {
@@ -59,6 +62,16 @@ namespace Pulse
                 return null;
             }
 
+            var playniteId = game.Id.ToString();
+            if (stateStore != null)
+            {
+                var cachedMetadata = stateStore.TryGetSyncMetadata(playniteId, trimmed, fullPath);
+                if (cachedMetadata != null)
+                {
+                    return cachedMetadata;
+                }
+            }
+
             byte[] bytes;
             try
             {
@@ -75,12 +88,25 @@ namespace Pulse
             }
 
             var hash = ComputeSha256Hex(bytes);
+            var contentType = GuessContentType(fullPath);
+
+            if (stateStore != null)
+            {
+                return stateStore.ReadHashAndCache(
+                    playniteId,
+                    trimmed,
+                    fullPath,
+                    bytes,
+                    hash,
+                    contentType);
+            }
+
             return new PlayniteCoverMetadata
             {
                 SourceKind = "file",
                 Hash = hash,
                 ByteSize = bytes.LongLength,
-                ContentType = GuessContentType(fullPath),
+                ContentType = contentType,
                 FilePath = fullPath
             };
         }

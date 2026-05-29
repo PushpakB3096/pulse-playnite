@@ -115,7 +115,7 @@ public partial class PulseAccountClient
             return;
         }
 
-        var metadata = Pulse.PlayniteCoverReader.TryRead(playniteApi, game);
+        var metadata = Pulse.PlayniteCoverReader.TryReadForSync(playniteApi, game, coverSyncStateStore);
         if (metadata == null)
         {
             return;

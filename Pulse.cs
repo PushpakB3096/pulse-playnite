@@ -29,6 +29,7 @@ namespace Pulse
         private readonly object sessionMapLock = new object();
         private readonly SessionSyncQueue sessionQueue;
         private readonly CoverUploadQueue coverUploadQueue;
+        private readonly CoverSyncStateStore coverSyncStateStore;
         private readonly System.Timers.Timer coverDrainTimer;
 
         public override Guid Id { get; } = Guid.Parse("d1ac11bf-1668-455f-ad91-6fdb334a54c5");
@@ -39,7 +40,12 @@ namespace Pulse
         {
             dialogs = api.Dialogs;
             settings = new PulseSettingsViewModel(this);
-            client = new PulseAccountClient(api, () => settings.Settings.PlayLogBearerToken?.Trim() ?? string.Empty);
+            var coverSyncStatePath = Path.Combine(GetPluginUserDataPath(), "cover-sync-state.json");
+            coverSyncStateStore = new CoverSyncStateStore(coverSyncStatePath);
+            client = new PulseAccountClient(
+                api,
+                () => settings.Settings.PlayLogBearerToken?.Trim() ?? string.Empty,
+                coverSyncStateStore);
             gaImporter = new GameActivitySessionImporter(
                 api,
                 client,
@@ -379,19 +385,24 @@ namespace Pulse
                     continue;
                 }
 
-                Guid gameGuid;
-                if (!Guid.TryParse(playniteId, out gameGuid))
+                var metadata = coverSyncStateStore.GetUploadMetadata(playniteId);
+                if (metadata == null)
                 {
-                    continue;
+                    Guid gameGuid;
+                    if (!Guid.TryParse(playniteId, out gameGuid))
+                    {
+                        continue;
+                    }
+
+                    var game = PlayniteApi.Database.Games.Get(gameGuid);
+                    if (game == null)
+                    {
+                        continue;
+                    }
+
+                    metadata = PlayniteCoverReader.TryReadForSync(PlayniteApi, game, coverSyncStateStore);
                 }
 
-                var game = PlayniteApi.Database.Games.Get(gameGuid);
-                if (game == null)
-                {
-                    continue;
-                }
-
-                var metadata = PlayniteCoverReader.TryRead(PlayniteApi, game);
                 coverUploadQueue.Enqueue(metadata, playniteId);
             }
 
