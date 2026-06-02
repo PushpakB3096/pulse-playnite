@@ -37,7 +37,7 @@ namespace Pulse
         private System.Timers.Timer recentlyPushedClearTimer;
 
         private const int RecentlyPushedClearMs = 15000;
-        private const int StatusIdlePollIntervalMs = 60000;
+        private const int StatusIdlePollIntervalMs = 30000;
 
         public override Guid Id { get; } = Guid.Parse("d1ac11bf-1668-455f-ad91-6fdb334a54c5");
 
