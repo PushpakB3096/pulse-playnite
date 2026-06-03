@@ -4,6 +4,7 @@ using Playnite.SDK.Models;
 using Playnite.SDK.Plugins;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -168,10 +169,14 @@ namespace Pulse
             var progressResult = dialogs.ActivateGlobalProgress(
                 args =>
                 {
-                    args.Text = $"PlayLog: Syncing {allGames.Count} games...";
                     try
                     {
-                        var coversNeedingUpload = RunLibraryMetadataSync(allGames, fullLibrarySync: true);
+                        var reportProgress = new Action<LibrarySyncProgress>(
+                            progress => ApplyLibrarySyncProgress(args, progress));
+                        var coversNeedingUpload = RunLibraryMetadataSync(
+                            allGames,
+                            fullLibrarySync: true,
+                            reportProgress);
                         FinishLibrarySyncWithCoverUpload(coversNeedingUpload);
                     }
                     catch (Exception ex)
@@ -180,7 +185,7 @@ namespace Pulse
                         throw;
                     }
                 },
-                new GlobalProgressOptions("PlayLog", true) { IsIndeterminate = true });
+                new GlobalProgressOptions("PlayLog", false) { IsIndeterminate = false });
 
             if (progressResult.Error != null)
             {
@@ -304,10 +309,11 @@ namespace Pulse
                 var progressResult = dialogs.ActivateGlobalProgress(
                     args =>
                     {
-                        args.Text = "PlayLog: Syncing pending library changes...";
                         try
                         {
-                            ExecutePendingSyncWork(toRemove, toUpdate);
+                            var reportProgress = new Action<LibrarySyncProgress>(
+                                progress => ApplyLibrarySyncProgress(args, progress));
+                            ExecutePendingSyncWork(toRemove, toUpdate, reportProgress);
                         }
                         catch (Exception ex)
                         {
@@ -315,7 +321,7 @@ namespace Pulse
                             throw;
                         }
                     },
-                    new GlobalProgressOptions("PlayLog", true) { IsIndeterminate = true });
+                    new GlobalProgressOptions("PlayLog", false) { IsIndeterminate = false });
 
                 if (progressResult.Error != null)
                 {
@@ -335,10 +341,19 @@ namespace Pulse
             }
         }
 
-        private void ExecutePendingSyncWork(List<Guid> toRemove, List<Guid> toUpdate)
+        private void ExecutePendingSyncWork(
+            List<Guid> toRemove,
+            List<Guid> toUpdate,
+            Action<LibrarySyncProgress> onProgress = null)
         {
             if (toRemove.Count > 0)
             {
+                onProgress?.Invoke(new LibrarySyncProgress
+                {
+                    Phase = LibrarySyncPhase.Deleting,
+                    DeleteCount = toRemove.Count
+                });
+
                 var playniteIds = toRemove.Select(id => id.ToString()).ToList();
                 client.DeleteGamesByPlayniteIdsAsync(playniteIds).GetAwaiter().GetResult();
             }
@@ -357,17 +372,84 @@ namespace Pulse
 
                 if (games.Count > 0)
                 {
-                    var coversNeedingUpload = RunLibraryMetadataSync(games, fullLibrarySync: false);
+                    var coversNeedingUpload = RunLibraryMetadataSync(
+                        games,
+                        fullLibrarySync: false,
+                        onProgress);
                     FinishLibrarySyncWithCoverUpload(coversNeedingUpload);
                 }
             }
         }
 
-        private IReadOnlyList<string> RunLibraryMetadataSync(IEnumerable<Game> games, bool fullLibrarySync)
+        private static void ApplyLibrarySyncProgress(
+            GlobalProgressActionArgs args,
+            LibrarySyncProgress progress)
         {
+            if (args == null || progress == null)
+            {
+                return;
+            }
+
+            switch (progress.Phase)
+            {
+                case LibrarySyncPhase.CheckingSettings:
+                    args.Text = "PlayLog: Checking account…";
+                    break;
+                case LibrarySyncPhase.PreparingBatch:
+                    args.Text = string.Format(
+                        CultureInfo.InvariantCulture,
+                        "PlayLog: Preparing games {0}–{1} of {2}…",
+                        progress.BatchRangeStart,
+                        progress.BatchRangeEnd,
+                        progress.GamesTotal);
+                    break;
+                case LibrarySyncPhase.UploadingBatch:
+                    args.Text = string.Format(
+                        CultureInfo.InvariantCulture,
+                        "PlayLog: Uploading batch {0} of {1} ({2}/{3})…",
+                        progress.BatchIndex,
+                        progress.BatchCount,
+                        progress.GamesDone,
+                        progress.GamesTotal);
+                    break;
+                case LibrarySyncPhase.Finalizing:
+                    args.Text = "PlayLog: Finalizing library…";
+                    break;
+                case LibrarySyncPhase.Deleting:
+                    args.Text = string.Format(
+                        CultureInfo.InvariantCulture,
+                        "PlayLog: Removing {0} games…",
+                        progress.DeleteCount);
+                    break;
+            }
+
+            if (progress.Phase == LibrarySyncPhase.Deleting || progress.GamesTotal <= 0)
+            {
+                return;
+            }
+
+            args.ProgressMaxValue = progress.GamesTotal;
+            args.CurrentProgressValue = Math.Min(progress.GamesDone, progress.GamesTotal);
+        }
+
+        private IReadOnlyList<string> RunLibraryMetadataSync(
+            IEnumerable<Game> games,
+            bool fullLibrarySync,
+            Action<LibrarySyncProgress> onProgress = null)
+        {
+            var gameList = games != null ? games.ToList() : new List<Game>();
+            var gamesTotal = gameList.Count;
+
+            onProgress?.Invoke(new LibrarySyncProgress
+            {
+                Phase = LibrarySyncPhase.CheckingSettings,
+                GamesDone = 0,
+                GamesTotal = gamesTotal
+            });
+
             var syncPlayniteCovers = client.GetSyncPlayniteCoversAsync().GetAwaiter().GetResult();
             client.SetIncludePlayniteCoversInSync(syncPlayniteCovers);
-            return client.SyncGamesAsync(games, fullLibrarySync).GetAwaiter().GetResult();
+            return client.SyncGamesAsync(gameList, fullLibrarySync, onProgress).GetAwaiter().GetResult();
         }
 
         private void FinishLibrarySyncWithCoverUpload(IReadOnlyList<string> coversNeedingUpload)

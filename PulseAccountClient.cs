@@ -10,6 +10,27 @@ using Playnite.SDK;
 using Playnite.SDK.Models;
 using Pulse;
 
+public enum LibrarySyncPhase
+{
+    CheckingSettings,
+    PreparingBatch,
+    UploadingBatch,
+    Finalizing,
+    Deleting
+}
+
+public sealed class LibrarySyncProgress
+{
+    public LibrarySyncPhase Phase { get; set; }
+    public int GamesDone { get; set; }
+    public int GamesTotal { get; set; }
+    public int BatchIndex { get; set; }
+    public int BatchCount { get; set; }
+    public int BatchRangeStart { get; set; }
+    public int BatchRangeEnd { get; set; }
+    public int DeleteCount { get; set; }
+}
+
 public partial class PulseAccountClient
 {
     private static readonly ILogger logger = LogManager.GetLogger();
@@ -314,7 +335,17 @@ public partial class PulseAccountClient
         includePlayniteCoversInSync = enabled;
     }
 
-    public async Task<IReadOnlyList<string>> SyncGamesAsync(IEnumerable<Game> games, bool fullLibrarySync = false)
+    private static void ReportLibrarySyncProgress(
+        Action<LibrarySyncProgress> onProgress,
+        LibrarySyncProgress progress)
+    {
+        onProgress?.Invoke(progress);
+    }
+
+    public async Task<IReadOnlyList<string>> SyncGamesAsync(
+        IEnumerable<Game> games,
+        bool fullLibrarySync = false,
+        Action<LibrarySyncProgress> onProgress = null)
     {
         var gameList = games != null ? games.ToList() : new List<Game>();
         if (gameList.Count == 0)
@@ -340,11 +371,39 @@ public partial class PulseAccountClient
             var skip = syncBatchIndex * GamesSyncBatchSize;
             var batchSize = Math.Min(GamesSyncBatchSize, totalGames - skip);
             var batchGames = gameList.GetRange(skip, batchSize);
+            var batchIndexOneBased = syncBatchIndex + 1;
+            var rangeStart = skip + 1;
+            var rangeEnd = skip + batchSize;
+
+            ReportLibrarySyncProgress(onProgress, new LibrarySyncProgress
+            {
+                Phase = LibrarySyncPhase.PreparingBatch,
+                GamesDone = skip,
+                GamesTotal = totalGames,
+                BatchIndex = batchIndexOneBased,
+                BatchCount = batchCount,
+                BatchRangeStart = rangeStart,
+                BatchRangeEnd = rangeEnd
+            });
+
+            var mappedGames = batchGames
+                .Select(syncGame => MapGameToDto(syncGame, hltbBatchCounters))
+                .ToList();
+
+            ReportLibrarySyncProgress(onProgress, new LibrarySyncProgress
+            {
+                Phase = LibrarySyncPhase.UploadingBatch,
+                GamesDone = skip,
+                GamesTotal = totalGames,
+                BatchIndex = batchIndexOneBased,
+                BatchCount = batchCount,
+                BatchRangeStart = rangeStart,
+                BatchRangeEnd = rangeEnd
+            });
+
             var payload = new GamesSyncRequest
             {
-                Games = batchGames
-                    .Select(syncGame => MapGameToDto(syncGame, hltbBatchCounters))
-                    .ToList(),
+                Games = mappedGames,
                 FullLibrarySync = false,
                 SyncRun = new SyncRunDto
                 {
@@ -381,12 +440,30 @@ public partial class PulseAccountClient
             }
 
             allCoversNeedingUpload.AddRange(ParseCoversNeedingUpload(responseBody));
+
+            ReportLibrarySyncProgress(onProgress, new LibrarySyncProgress
+            {
+                Phase = LibrarySyncPhase.UploadingBatch,
+                GamesDone = skip + batchSize,
+                GamesTotal = totalGames,
+                BatchIndex = batchIndexOneBased,
+                BatchCount = batchCount,
+                BatchRangeStart = rangeStart,
+                BatchRangeEnd = rangeEnd
+            });
         }
 
         hltbBatchCounters.LogBatchSummary(logger, gameList.Count, _extensionsDataPath);
 
         if (fullLibrarySync)
         {
+            ReportLibrarySyncProgress(onProgress, new LibrarySyncProgress
+            {
+                Phase = LibrarySyncPhase.Finalizing,
+                GamesDone = totalGames,
+                GamesTotal = totalGames
+            });
+
             var playniteIds = gameList.Select(libraryGame => libraryGame.Id.ToString()).Distinct().ToList();
             await PostGamesSyncCompleteAsync(syncRunId, playniteIds).ConfigureAwait(false);
         }
