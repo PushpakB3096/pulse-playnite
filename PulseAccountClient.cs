@@ -62,6 +62,9 @@ public partial class PulseAccountClient
             baseUrlClean + "/api/sessions/import/game-activity";
         usersMeEndpoint = baseUrlClean + "/api/users/me";
         playniteCoverUploadEndpoint = baseUrlClean + "/api/games/covers/playnite";
+        playniteStatusPendingEndpoint = baseUrlClean + "/api/games/playnite-status-pending";
+        playniteStatusPendingAckEndpoint =
+            baseUrlClean + "/api/games/playnite-status-pending/ack";
     }
 
     private void ApplyBearer(HttpRequestMessage req)

@@ -31,6 +31,13 @@ namespace Pulse
         private readonly CoverUploadQueue coverUploadQueue;
         private readonly CoverSyncStateStore coverSyncStateStore;
         private readonly System.Timers.Timer coverDrainTimer;
+        private readonly System.Timers.Timer statusIdlePollTimer;
+        private readonly HashSet<Guid> recentlyPushedFromPlayLog = new HashSet<Guid>();
+        private readonly object recentlyPushedLock = new object();
+        private System.Timers.Timer recentlyPushedClearTimer;
+
+        private const int RecentlyPushedClearMs = 15000;
+        private const int StatusIdlePollIntervalMs = 30000;
 
         public override Guid Id { get; } = Guid.Parse("d1ac11bf-1668-455f-ad91-6fdb334a54c5");
 
@@ -70,6 +77,10 @@ namespace Pulse
             syncTimer = new System.Timers.Timer(5000);
             syncTimer.AutoReset = false;
             syncTimer.Elapsed += (_, __) => FlushPendingSyncQueues(showShutdownProgress: false);
+
+            statusIdlePollTimer = new System.Timers.Timer(StatusIdlePollIntervalMs);
+            statusIdlePollTimer.AutoReset = true;
+            statusIdlePollTimer.Elapsed += (_, __) => ApplyPendingStatusUpdatesFromServerSafe();
 
             Properties = new GenericPluginProperties
             {
@@ -208,6 +219,14 @@ namespace Pulse
                 var game = item.NewData;
                 if (game != null)
                 {
+                    lock (recentlyPushedLock)
+                    {
+                        if (recentlyPushedFromPlayLog.Contains(game.Id))
+                        {
+                            continue;
+                        }
+                    }
+
                     lock (syncQueueLock)
                     {
                         gameIdsToUpdate.Add(game.Id);
@@ -360,6 +379,165 @@ namespace Pulse
                     var coversNeedingUpload = RunLibraryMetadataSync(games, fullLibrarySync: false);
                     FinishLibrarySyncWithCoverUpload(coversNeedingUpload);
                 }
+            }
+
+            ApplyPendingStatusUpdatesFromServer();
+        }
+
+        private void ApplyPendingStatusUpdatesFromServerSafe()
+        {
+            if (!settings.IsPlayLogLinked)
+            {
+                return;
+            }
+
+            try
+            {
+                ApplyPendingStatusUpdatesFromServer();
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "PlayLog: idle status push poll failed.");
+            }
+        }
+
+        private void ApplyPendingStatusUpdatesFromServer()
+        {
+            if (!settings.IsPlayLogLinked)
+            {
+                return;
+            }
+
+            IReadOnlyList<PulseAccountClient.PlayniteStatusPendingDto> pending;
+            try
+            {
+                pending = client.GetPlayniteStatusPendingAsync().GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "PlayLog: fetch pending status updates failed.");
+                return;
+            }
+
+            if (pending == null || pending.Count == 0)
+            {
+                return;
+            }
+
+            var ackPlayniteIds = new List<string>();
+
+            using (PlayniteApi.Database.BufferedUpdate())
+            {
+                foreach (var row in pending)
+                {
+                    if (row == null || string.IsNullOrWhiteSpace(row.PlayniteId))
+                    {
+                        continue;
+                    }
+
+                    if (!Guid.TryParse(row.PlayniteId.Trim(), out var gameGuid))
+                    {
+                        continue;
+                    }
+
+                    var game = PlayniteApi.Database.Games.Get(gameGuid);
+                    if (game == null)
+                    {
+                        continue;
+                    }
+
+                    var statusName = row.TargetCompletionStatusName?.Trim();
+                    if (string.IsNullOrEmpty(statusName))
+                    {
+                        continue;
+                    }
+
+                    var statusId = ResolveCompletionStatusId(statusName);
+                    if (statusId == Guid.Empty)
+                    {
+                        logger.Warn(
+                            "PlayLog: no Playnite completion status named \"" + statusName + "\".");
+                        continue;
+                    }
+
+                    if (game.CompletionStatusId == statusId)
+                    {
+                        ackPlayniteIds.Add(row.PlayniteId.Trim());
+                        continue;
+                    }
+
+                    game.CompletionStatusId = statusId;
+                    PlayniteApi.Database.Games.Update(game);
+                    MarkRecentlyPushedFromPlayLog(gameGuid);
+                    ackPlayniteIds.Add(row.PlayniteId.Trim());
+                }
+            }
+
+            if (ackPlayniteIds.Count == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                client.AckPlayniteStatusPendingAsync(ackPlayniteIds).GetAwaiter().GetResult();
+                logger.Info(
+                    "PlayLog: applied " + ackPlayniteIds.Count + " pending status update(s) from PlayLog.");
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "PlayLog: ack pending status updates failed.");
+            }
+        }
+
+        private Guid ResolveCompletionStatusId(string statusName)
+        {
+            if (string.IsNullOrWhiteSpace(statusName))
+            {
+                return Guid.Empty;
+            }
+
+            foreach (var completionStatus in PlayniteApi.Database.CompletionStatuses)
+            {
+                if (completionStatus == null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(
+                        completionStatus.Name,
+                        statusName,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return completionStatus.Id;
+                }
+            }
+
+            return Guid.Empty;
+        }
+
+        private void MarkRecentlyPushedFromPlayLog(Guid gameId)
+        {
+            lock (recentlyPushedLock)
+            {
+                recentlyPushedFromPlayLog.Add(gameId);
+            }
+
+            recentlyPushedClearTimer?.Stop();
+            recentlyPushedClearTimer?.Dispose();
+            recentlyPushedClearTimer = new System.Timers.Timer(RecentlyPushedClearMs)
+            {
+                AutoReset = false
+            };
+            recentlyPushedClearTimer.Elapsed += (_, __) => ClearRecentlyPushedFromPlayLog();
+            recentlyPushedClearTimer.Start();
+        }
+
+        private void ClearRecentlyPushedFromPlayLog()
+        {
+            lock (recentlyPushedLock)
+            {
+                recentlyPushedFromPlayLog.Clear();
             }
         }
 
@@ -519,11 +697,19 @@ namespace Pulse
 
             KickCoverUploadDrain();
 
+            if (settings.IsPlayLogLinked)
+            {
+                statusIdlePollTimer.Start();
+                ApplyPendingStatusUpdatesFromServerSafe();
+            }
+
             _ = gaImporter.RunAsync();
         }
 
         public override void OnApplicationStopped(OnApplicationStoppedEventArgs args)
         {
+            statusIdlePollTimer.Stop();
+            recentlyPushedClearTimer?.Stop();
             FlushPendingSyncQueues(showShutdownProgress: true);
             try
             {
