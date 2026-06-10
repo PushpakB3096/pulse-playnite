@@ -120,5 +120,8 @@ public partial class PulseAccountClient
 
         [JsonProperty("requestedAt")]
         public string RequestedAt { get; set; }
+
+        [JsonProperty("favorite")]
+        public bool? Favorite { get; set; }
     }
 }

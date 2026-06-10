@@ -465,29 +465,63 @@ namespace Pulse
                     }
 
                     var statusName = row.TargetCompletionStatusName?.Trim();
-                    if (string.IsNullOrEmpty(statusName))
+                    var statusRequested = !string.IsNullOrEmpty(statusName);
+                    var favoriteRequested = row.Favorite.HasValue;
+
+                    if (!statusRequested && !favoriteRequested)
                     {
                         continue;
                     }
 
-                    var statusId = ResolveCompletionStatusId(statusName);
-                    if (statusId == Guid.Empty)
+                    var statusOk = !statusRequested;
+                    var favoriteOk = !favoriteRequested;
+                    var rowChanged = false;
+
+                    if (statusRequested)
                     {
-                        logger.Warn(
-                            "PlayLog: no Playnite completion status named \"" + statusName + "\".");
-                        continue;
+                        var statusId = ResolveCompletionStatusId(statusName);
+                        if (statusId == Guid.Empty)
+                        {
+                            logger.Warn(
+                                "PlayLog: no Playnite completion status named \"" + statusName + "\".");
+                        }
+                        else if (game.CompletionStatusId == statusId)
+                        {
+                            statusOk = true;
+                        }
+                        else
+                        {
+                            game.CompletionStatusId = statusId;
+                            rowChanged = true;
+                            statusOk = true;
+                        }
                     }
 
-                    if (game.CompletionStatusId == statusId)
+                    if (favoriteRequested)
+                    {
+                        var targetFavorite = row.Favorite.Value;
+                        if (game.Favorite == targetFavorite)
+                        {
+                            favoriteOk = true;
+                        }
+                        else
+                        {
+                            game.Favorite = targetFavorite;
+                            rowChanged = true;
+                            favoriteOk = true;
+                        }
+                    }
+
+                    if (rowChanged)
+                    {
+                        PlayniteApi.Database.Games.Update(game);
+                        MarkRecentlyPushedFromPlayLog(gameGuid);
+                    }
+
+                    if (statusOk && favoriteOk)
                     {
                         ackPlayniteIds.Add(row.PlayniteId.Trim());
-                        continue;
                     }
-
-                    game.CompletionStatusId = statusId;
-                    PlayniteApi.Database.Games.Update(game);
-                    MarkRecentlyPushedFromPlayLog(gameGuid);
-                    ackPlayniteIds.Add(row.PlayniteId.Trim());
                 }
             }
 
