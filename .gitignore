@@ -6,3 +6,4 @@ _pext/
 Playnite_setup.exe
 __pycache__/
 *.pyc
+.DS_Store
