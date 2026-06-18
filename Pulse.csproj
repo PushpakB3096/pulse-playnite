@@ -61,6 +61,7 @@
     <Compile Include="AchievementExtensionGameDataReader.cs" />
     <Compile Include="GameActivitySessionImporter.cs" />
     <Compile Include="CoverSyncStateStore.cs" />
+    <Compile Include="ActiveSessionStateStore.cs" />
     <Compile Include="CoverUploadQueue.cs" />
     <Compile Include="PlayniteCoverReader.cs" />
     <Compile Include="PulseAccountClient.Covers.cs" />
