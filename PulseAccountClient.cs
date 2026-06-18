@@ -364,6 +364,7 @@ public partial class PulseAccountClient
         }
 
         var hltbBatchCounters = new HltbSyncBatchCounters();
+        var achievementBatchCounters = new AchievementSyncBatchCounters();
         var totalGames = gameList.Count;
         var batchCount = (totalGames + GamesSyncBatchSize - 1) / GamesSyncBatchSize;
         var syncRunId = Guid.NewGuid().ToString();
@@ -390,7 +391,7 @@ public partial class PulseAccountClient
             });
 
             var mappedGames = batchGames
-                .Select(syncGame => MapGameToDto(syncGame, hltbBatchCounters))
+                .Select(syncGame => MapGameToDto(syncGame, hltbBatchCounters, achievementBatchCounters))
                 .ToList();
 
             ReportLibrarySyncProgress(onProgress, new LibrarySyncProgress
@@ -457,6 +458,7 @@ public partial class PulseAccountClient
         }
 
         hltbBatchCounters.LogBatchSummary(logger, gameList.Count, _extensionsDataPath);
+        achievementBatchCounters.LogBatchSummary(logger, gameList.Count, _extensionsDataPath);
 
         if (fullLibrarySync)
         {
@@ -682,7 +684,10 @@ public sealed class GameHltbDataDto
 
 partial class PulseAccountClient
 {
-    private PulseGameDto MapGameToDto(Game game, HltbSyncBatchCounters hltbBatchCounters)
+    private PulseGameDto MapGameToDto(
+        Game game,
+        HltbSyncBatchCounters hltbBatchCounters,
+        AchievementSyncBatchCounters achievementBatchCounters)
     {
         var releaseDate = game.ReleaseDate;
 
@@ -787,6 +792,13 @@ partial class PulseAccountClient
             hltbBatchCounters);
         if (hltbData != null)
             dto.HltbData = hltbData;
+
+        var achievementImport = AchievementExtensionGameDataReader.TryRead(
+            _extensionsDataPath,
+            game.Id,
+            achievementBatchCounters);
+        if (achievementImport != null)
+            dto.AchievementImport = achievementImport;
 
         AttachPlayniteCoverMetadata(dto, game);
 
@@ -1103,6 +1115,9 @@ partial class PulseAccountClient
 
         [JsonProperty("hltbData", NullValueHandling = NullValueHandling.Ignore)]
         public GameHltbDataDto HltbData { get; set; }
+
+        [JsonProperty("achievementImport", NullValueHandling = NullValueHandling.Ignore)]
+        public AchievementImportDto AchievementImport { get; set; }
 
         [JsonProperty("playniteCover", NullValueHandling = NullValueHandling.Ignore)]
         public PlayniteCoverSyncDto PlayniteCover { get; set; }

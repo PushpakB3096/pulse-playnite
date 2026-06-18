@@ -29,6 +29,7 @@ namespace Pulse
         private readonly Dictionary<Guid, string> activeSessionByGameId = new Dictionary<Guid, string>();
         private readonly object sessionMapLock = new object();
         private readonly SessionSyncQueue sessionQueue;
+        private readonly ActiveSessionStateStore activeSessionStateStore;
         private readonly CoverUploadQueue coverUploadQueue;
         private readonly CoverSyncStateStore coverSyncStateStore;
         private readonly System.Timers.Timer coverDrainTimer;
@@ -63,6 +64,8 @@ namespace Pulse
                 sessionQueuePath,
                 client,
                 () => settings.Settings.PlayLogBearerToken?.Trim() ?? string.Empty);
+            var activeSessionStatePath = Path.Combine(GetPluginUserDataPath(), "pulse-active-sessions.json");
+            activeSessionStateStore = new ActiveSessionStateStore(activeSessionStatePath);
             var coverQueuePath = Path.Combine(GetPluginUserDataPath(), "pulse-cover-upload-queue.jsonl");
             coverUploadQueue = new CoverUploadQueue(
                 coverQueuePath,
@@ -284,6 +287,29 @@ namespace Pulse
         {
             syncTimer.Stop();
             syncTimer.Start();
+        }
+
+        private void PersistActiveSessionMap()
+        {
+            activeSessionStateStore.SaveActiveSessions(activeSessionByGameId);
+        }
+
+        private void ReconcilePersistedActiveSessionsOnStartup()
+        {
+            var pending = activeSessionStateStore.TakePendingReconciliation();
+            if (pending.Sessions == null || pending.Sessions.Count == 0)
+            {
+                return;
+            }
+
+            var endUtc = pending.LastShutdownUtc ?? DateTime.UtcNow;
+            foreach (var entry in pending.Sessions)
+            {
+                sessionQueue.EnqueueStop(
+                    entry.ClientSessionId,
+                    entry.GameId.ToString(),
+                    endUtc);
+            }
         }
 
         /// <summary>
@@ -743,6 +769,7 @@ namespace Pulse
                     activeSessionByGameId.TryGetValue(args.Game.Id, out oldSessionId);
                     newSessionId = Guid.NewGuid().ToString("D");
                     activeSessionByGameId[args.Game.Id] = newSessionId;
+                    PersistActiveSessionMap();
                 }
 
                 var startUtc = DateTime.UtcNow;
@@ -784,6 +811,7 @@ namespace Pulse
                     }
 
                     activeSessionByGameId.Remove(args.Game.Id);
+                    PersistActiveSessionMap();
                 }
 
                 var endUtc = DateTime.UtcNow;
@@ -804,6 +832,7 @@ namespace Pulse
         {
             try
             {
+                ReconcilePersistedActiveSessionsOnStartup();
                 sessionQueue.TryDrainAll();
             }
             catch (Exception ex)
@@ -826,10 +855,25 @@ namespace Pulse
         {
             statusIdlePollTimer.Stop();
             recentlyPushedClearTimer?.Stop();
+
+            lock (sessionMapLock)
+            {
+                var shutdownUtc = DateTime.UtcNow;
+                foreach (var entry in activeSessionByGameId.ToList())
+                {
+                    sessionQueue.EnqueueStop(entry.Value, entry.Key.ToString(), shutdownUtc);
+                }
+
+                activeSessionStateStore.SaveActiveSessions(activeSessionByGameId, shutdownUtc);
+            }
+
             FlushPendingSyncQueues(showShutdownProgress: true);
             try
             {
                 sessionQueue.TryDrainAll();
+                activeSessionStateStore.SaveActiveSessions(
+                    new Dictionary<Guid, string>(),
+                    null);
             }
             catch (Exception ex)
             {
