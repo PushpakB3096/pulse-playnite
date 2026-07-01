@@ -51,6 +51,12 @@
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Xml" />
     <Reference Include="WindowsBase" />
+    <!-- SQLite for reading PlayniteAchievements achievement_cache.db.
+         Run 'nuget restore' to download the package.
+         The native SQLite.Interop.dll (x64) must also be bundled with the extension package. -->
+    <Reference Include="System.Data.SQLite">
+      <HintPath>packages\System.Data.SQLite.1.0.118.0\lib\net46\System.Data.SQLite.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DeterministicSessionGuid.cs" />

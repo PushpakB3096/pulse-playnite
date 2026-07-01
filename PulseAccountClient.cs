@@ -44,6 +44,7 @@ public partial class PulseAccountClient
 
     private readonly IPlayniteAPI playniteApi;
     private readonly Func<string> getBearerToken;
+    private readonly Func<string> getAchievementSourcePreference;
     private readonly string _extensionsDataPath;
     private readonly string gamesSyncEndpoint;
     private readonly string gamesSyncEndpointV2;
@@ -61,12 +62,15 @@ public partial class PulseAccountClient
     public PulseAccountClient(
         IPlayniteAPI api,
         Func<string> getBearerToken,
+        Func<string> getAchievementSourcePreference,
         CoverSyncStateStore coverSyncStateStore)
     {
         if (api == null)
             throw new ArgumentNullException(nameof(api));
         playniteApi = api;
         this.getBearerToken = getBearerToken ?? throw new ArgumentNullException(nameof(getBearerToken));
+        this.getAchievementSourcePreference = getAchievementSourcePreference
+            ?? throw new ArgumentNullException(nameof(getAchievementSourcePreference));
         this.coverSyncStateStore = coverSyncStateStore;
         _extensionsDataPath = api.Paths?.ExtensionsDataPath;
 
@@ -365,6 +369,8 @@ public partial class PulseAccountClient
 
         var hltbBatchCounters = new HltbSyncBatchCounters();
         var achievementBatchCounters = new AchievementSyncBatchCounters();
+        var resolvedAchievementSource = getAchievementSourcePreference?.Invoke()
+            ?? AchievementExtensionPaths.ImportSourcePlayniteAchievements;
         var totalGames = gameList.Count;
         var batchCount = (totalGames + GamesSyncBatchSize - 1) / GamesSyncBatchSize;
         var syncRunId = Guid.NewGuid().ToString();
@@ -391,7 +397,7 @@ public partial class PulseAccountClient
             });
 
             var mappedGames = batchGames
-                .Select(syncGame => MapGameToDto(syncGame, hltbBatchCounters, achievementBatchCounters))
+                .Select(syncGame => MapGameToDto(syncGame, hltbBatchCounters, achievementBatchCounters, resolvedAchievementSource))
                 .ToList();
 
             ReportLibrarySyncProgress(onProgress, new LibrarySyncProgress
@@ -687,7 +693,8 @@ partial class PulseAccountClient
     private PulseGameDto MapGameToDto(
         Game game,
         HltbSyncBatchCounters hltbBatchCounters,
-        AchievementSyncBatchCounters achievementBatchCounters)
+        AchievementSyncBatchCounters achievementBatchCounters,
+        string achievementSourcePreference)
     {
         var releaseDate = game.ReleaseDate;
 
@@ -796,6 +803,7 @@ partial class PulseAccountClient
         var achievementImport = AchievementExtensionGameDataReader.TryRead(
             _extensionsDataPath,
             game.Id,
+            achievementSourcePreference,
             achievementBatchCounters);
         if (achievementImport != null)
             dto.AchievementImport = achievementImport;
