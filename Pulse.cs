@@ -40,6 +40,7 @@ namespace Pulse
 
         private const int RecentlyPushedClearMs = 15000;
         private const int StatusIdlePollIntervalMs = 30000;
+        private const int PostStopAchievementSyncDelayMs = 60000;
 
         public override Guid Id { get; } = Guid.Parse("d1ac11bf-1668-455f-ad91-6fdb334a54c5");
 
@@ -54,6 +55,7 @@ namespace Pulse
             client = new PulseAccountClient(
                 api,
                 () => settings.Settings.PlayLogBearerToken?.Trim() ?? string.Empty,
+                () => settings.Settings.AchievementSourcePreference ?? AchievementExtensionPaths.ImportSourcePlayniteAchievements,
                 coverSyncStateStore);
             gaImporter = new GameActivitySessionImporter(
                 api,
@@ -822,6 +824,41 @@ namespace Pulse
             {
                 logger.Error(ex, "PlayLog: OnGameStopped session tracking failed.");
             }
+
+            SchedulePostStopAchievementSync(args.Game.Id);
+        }
+
+        /// <summary>
+        /// Schedules an achievement-only sync for a single game 60 seconds after it stops.
+        /// This gives the achievement plugin (SuccessStory or PA) time to write updated data to disk.
+        /// Only runs when linked and AutoSyncLibrary is on.
+        /// </summary>
+        private void SchedulePostStopAchievementSync(Guid gameId)
+        {
+            if (!settings.Settings.AutoSyncLibrary || !settings.IsPlayLogLinked)
+                return;
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(PostStopAchievementSyncDelayMs).ConfigureAwait(false);
+
+                    if (!settings.Settings.AutoSyncLibrary || !settings.IsPlayLogLinked)
+                        return;
+
+                    var game = PlayniteApi.Database.Games.Get(gameId);
+                    if (game == null)
+                        return;
+
+                    logger.Info("PlayLog: post-stop achievement sync for game " + gameId);
+                    RunLibraryMetadataSync(new List<Game> { game }, fullLibrarySync: false);
+                }
+                catch (Exception ex)
+                {
+                    logger.Error(ex, "PlayLog: post-stop achievement sync failed for game " + gameId);
+                }
+            });
         }
 
         public override void OnGameUninstalled(OnGameUninstalledEventArgs args)
@@ -889,6 +926,9 @@ namespace Pulse
         {
             return await client.GetSyncPlayniteCoversAsync(forceRefresh).ConfigureAwait(false);
         }
+
+        internal string GetExtensionsDataPath() =>
+            PlayniteApi?.Paths?.ExtensionsDataPath ?? string.Empty;
 
         public override ISettings GetSettings(bool firstRunSettings)
         {

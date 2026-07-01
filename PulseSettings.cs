@@ -19,6 +19,17 @@ namespace Pulse
         /// </summary>
         public bool AutoSyncLibrary { get => autoSyncLibrary; set => SetValue(ref autoSyncLibrary, value); }
 
+        private string achievementSourcePreference = AchievementExtensionPaths.ImportSourcePlayniteAchievements;
+
+        /// <summary>
+        /// Which Playnite achievement plugin to read from: "playniteAchievements" or "successStory".
+        /// </summary>
+        public string AchievementSourcePreference
+        {
+            get => achievementSourcePreference;
+            set => SetValue(ref achievementSourcePreference, value);
+        }
+
         private string playLogBearerToken = string.Empty;
 
         /// <summary>
@@ -72,6 +83,53 @@ namespace Pulse
 
         public bool ShowCoverArtSection => IsPlayLogLinked;
 
+        /// <summary>True when the PA radio button should be checked.</summary>
+        public bool IsPlayniteAchievementsSelected
+        {
+            get => Settings?.AchievementSourcePreference == AchievementExtensionPaths.ImportSourcePlayniteAchievements;
+            set
+            {
+                if (value && Settings != null)
+                    Settings.AchievementSourcePreference = AchievementExtensionPaths.ImportSourcePlayniteAchievements;
+            }
+        }
+
+        /// <summary>True when the SuccessStory radio button should be checked.</summary>
+        public bool IsSuccessStorySelected
+        {
+            get => Settings?.AchievementSourcePreference == AchievementExtensionPaths.ImportSourceSuccessStory;
+            set
+            {
+                if (value && Settings != null)
+                    Settings.AchievementSourcePreference = AchievementExtensionPaths.ImportSourceSuccessStory;
+            }
+        }
+
+        /// <summary>True when the source preference differs from what it was when settings were opened.</summary>
+        public bool ShowAchievementSourceChangedWarning =>
+            editingClone != null &&
+            !string.Equals(
+                Settings?.AchievementSourcePreference,
+                editingClone.AchievementSourcePreference,
+                StringComparison.Ordinal);
+
+        /// <summary>True when the currently selected achievement source plugin is detected on disk.</summary>
+        public bool IsSelectedAchievementSourceInstalled
+        {
+            get
+            {
+                var extensionsDataPath = plugin.GetExtensionsDataPath();
+                if (string.IsNullOrEmpty(extensionsDataPath))
+                    return true;
+                return AchievementExtensionGameDataReader.IsSourceInstalled(
+                    extensionsDataPath,
+                    Settings?.AchievementSourcePreference);
+            }
+        }
+
+        /// <summary>True when the selected achievement source is NOT installed (drives warning visibility).</summary>
+        public bool ShowAchievementSourceNotInstalledWarning => !IsSelectedAchievementSourceInstalled;
+
         public bool SyncPlayniteCoversEnabled => syncPlayniteCoversEnabled;
 
         public int CoverUploadPendingCount =>
@@ -116,6 +174,14 @@ namespace Pulse
             if (e.PropertyName == nameof(PulseSettings.PlayLogBearerToken))
             {
                 NotifyPlayLogLinkChanged();
+            }
+
+            if (e.PropertyName == nameof(PulseSettings.AchievementSourcePreference))
+            {
+                OnPropertyChanged(nameof(IsPlayniteAchievementsSelected));
+                OnPropertyChanged(nameof(IsSuccessStorySelected));
+                OnPropertyChanged(nameof(ShowAchievementSourceChangedWarning));
+                OnPropertyChanged(nameof(IsSelectedAchievementSourceInstalled));
             }
         }
 
@@ -214,6 +280,9 @@ namespace Pulse
         {
             // Code executed when settings view is opened and user starts editing values.
             editingClone = Serialization.GetClone(Settings);
+            OnPropertyChanged(nameof(ShowAchievementSourceChangedWarning));
+            OnPropertyChanged(nameof(IsSelectedAchievementSourceInstalled));
+            OnPropertyChanged(nameof(ShowAchievementSourceNotInstalledWarning));
             _ = RefreshCoverSyncStatusAsync();
             StartCoverStatusTimer();
         }
