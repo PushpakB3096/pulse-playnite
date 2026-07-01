@@ -4,7 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
-             d:DesignHeight="400" d:DesignWidth="600">
+             d:DesignHeight="500" d:DesignWidth="600">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
     </UserControl.Resources>
@@ -13,6 +13,22 @@
                   IsChecked="{Binding Settings.AutoSyncLibrary}"/>
         <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="Gray"
                    Text="When enabled, PlayLog syncs after Playnite updates your library. You can still use PlayLog: Sync all games from the main menu."/>
+
+        <TextBlock Margin="0,16,0,0" TextWrapping="Wrap" FontWeight="SemiBold"
+                   Text="Achievement source"/>
+        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="Gray"
+                   Text="Choose which Playnite achievement plugin PlayLog reads from."/>
+        <RadioButton Margin="0,8,0,0"
+                     Content="PlayniteAchievements"
+                     IsChecked="{Binding IsPlayniteAchievementsSelected}"/>
+        <RadioButton Margin="0,4,0,0"
+                     Content="SuccessStory"
+                     IsChecked="{Binding IsSuccessStorySelected}"/>
+
+        <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#CC8800"
+                   Visibility="{Binding ShowAchievementSourceChangedWarning, Converter={StaticResource BoolToVisibility}}"
+                   Text="Achievement source changed. Run PlayLog: Sync all games from the main menu to update all your games."/>
+
         <TextBlock Margin="0,16,0,0" TextWrapping="Wrap" FontWeight="SemiBold"
                    Text="PlayLog account"/>
 
