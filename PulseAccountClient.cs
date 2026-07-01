@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Playnite.SDK;
@@ -14,7 +15,7 @@ public enum LibrarySyncPhase
 {
     CheckingSettings,
     PreparingBatch,
-    UploadingBatch,
+    SyncingLibrary,
     Finalizing,
     Deleting
 }
@@ -40,6 +41,7 @@ public partial class PulseAccountClient
     private static readonly HttpClient http = new HttpClient();
 
     private const int GamesSyncBatchSize = 300;
+    private const int MaxParallelSyncBatches = 5;
     private const string GamesSyncV2Query = "?syncVersion=2";
 
     private readonly IPlayniteAPI playniteApi;
@@ -368,44 +370,31 @@ public partial class PulseAccountClient
         var totalGames = gameList.Count;
         var batchCount = (totalGames + GamesSyncBatchSize - 1) / GamesSyncBatchSize;
         var syncRunId = Guid.NewGuid().ToString();
-        var allCoversNeedingUpload = new List<string>();
 
+        // Phase 1: map all batches sequentially (MapGameToDto mutates shared counters and reads from disk)
+        var preparedBatches = new List<(GamesSyncRequest Payload, int BatchSize)>(batchCount);
         for (var syncBatchIndex = 0; syncBatchIndex < batchCount; syncBatchIndex++)
         {
             var skip = syncBatchIndex * GamesSyncBatchSize;
             var batchSize = Math.Min(GamesSyncBatchSize, totalGames - skip);
             var batchGames = gameList.GetRange(skip, batchSize);
-            var batchIndexOneBased = syncBatchIndex + 1;
-            var rangeStart = skip + 1;
-            var rangeEnd = skip + batchSize;
 
             ReportLibrarySyncProgress(onProgress, new LibrarySyncProgress
             {
                 Phase = LibrarySyncPhase.PreparingBatch,
                 GamesDone = skip,
                 GamesTotal = totalGames,
-                BatchIndex = batchIndexOneBased,
+                BatchIndex = syncBatchIndex + 1,
                 BatchCount = batchCount,
-                BatchRangeStart = rangeStart,
-                BatchRangeEnd = rangeEnd
+                BatchRangeStart = skip + 1,
+                BatchRangeEnd = skip + batchSize
             });
 
             var mappedGames = batchGames
                 .Select(syncGame => MapGameToDto(syncGame, hltbBatchCounters, achievementBatchCounters))
                 .ToList();
 
-            ReportLibrarySyncProgress(onProgress, new LibrarySyncProgress
-            {
-                Phase = LibrarySyncPhase.UploadingBatch,
-                GamesDone = skip,
-                GamesTotal = totalGames,
-                BatchIndex = batchIndexOneBased,
-                BatchCount = batchCount,
-                BatchRangeStart = rangeStart,
-                BatchRangeEnd = rangeEnd
-            });
-
-            var payload = new GamesSyncRequest
+            preparedBatches.Add((new GamesSyncRequest
             {
                 Games = mappedGames,
                 FullLibrarySync = false,
@@ -416,49 +405,38 @@ public partial class PulseAccountClient
                     BatchCount = batchCount,
                     TotalGames = totalGames
                 }
-            };
-
-            var json = JsonConvert.SerializeObject(payload);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-            var httpReq = new HttpRequestMessage(HttpMethod.Post, gamesSyncEndpointV2);
-            httpReq.Content = content;
-            ApplyBearer(httpReq);
-
-            HttpResponseMessage resp;
-            try
-            {
-                resp = await http.SendAsync(httpReq).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                logger.Error(ex, "PlayLog: HTTP request to games/sync failed.");
-                throw;
-            }
-
-            var responseBody = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-            if (!resp.IsSuccessStatusCode)
-            {
-                logger.Error("PlayLog: backend responded with " + resp.StatusCode + ": " + responseBody);
-                throw new Exception("PlayLog backend error: " + resp.StatusCode);
-            }
-
-            allCoversNeedingUpload.AddRange(ParseCoversNeedingUpload(responseBody));
-
-            ReportLibrarySyncProgress(onProgress, new LibrarySyncProgress
-            {
-                Phase = LibrarySyncPhase.UploadingBatch,
-                GamesDone = skip + batchSize,
-                GamesTotal = totalGames,
-                BatchIndex = batchIndexOneBased,
-                BatchCount = batchCount,
-                BatchRangeStart = rangeStart,
-                BatchRangeEnd = rangeEnd
-            });
+            }, batchSize));
         }
 
         hltbBatchCounters.LogBatchSummary(logger, gameList.Count, _extensionsDataPath);
         achievementBatchCounters.LogBatchSummary(logger, gameList.Count, _extensionsDataPath);
+
+        // Phase 2: POST all batches with a SemaphoreSlim sliding window (at most MaxParallelSyncBatches in-flight)
+        var semaphore = new SemaphoreSlim(MaxParallelSyncBatches);
+        var gamesDoneCount = new int[1];
+        var batchTasks = preparedBatches.Select(async prepared =>
+        {
+            await semaphore.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var batchCovers = await PostGamesSyncBatchAsync(prepared.Payload).ConfigureAwait(false);
+                var nowDone = Interlocked.Add(ref gamesDoneCount[0], prepared.BatchSize);
+                ReportLibrarySyncProgress(onProgress, new LibrarySyncProgress
+                {
+                    Phase = LibrarySyncPhase.SyncingLibrary,
+                    GamesDone = nowDone,
+                    GamesTotal = totalGames
+                });
+                return batchCovers;
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        }).ToList();
+
+        var batchResults = await Task.WhenAll(batchTasks).ConfigureAwait(false);
+        var allCoversNeedingUpload = batchResults.SelectMany(covers => covers).ToList();
 
         if (fullLibrarySync)
         {
@@ -479,6 +457,36 @@ public partial class PulseAccountClient
             .Where(playniteId => !string.IsNullOrWhiteSpace(playniteId))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private async Task<IReadOnlyList<string>> PostGamesSyncBatchAsync(GamesSyncRequest payload)
+    {
+        var json = JsonConvert.SerializeObject(payload);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        var httpReq = new HttpRequestMessage(HttpMethod.Post, gamesSyncEndpointV2);
+        httpReq.Content = content;
+        ApplyBearer(httpReq);
+
+        HttpResponseMessage resp;
+        try
+        {
+            resp = await http.SendAsync(httpReq).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.Error(ex, "PlayLog: HTTP request to games/sync failed.");
+            throw;
+        }
+
+        var responseBody = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+        if (!resp.IsSuccessStatusCode)
+        {
+            logger.Error("PlayLog: backend responded with " + resp.StatusCode + ": " + responseBody);
+            throw new Exception("PlayLog backend error: " + resp.StatusCode);
+        }
+
+        return ParseCoversNeedingUpload(responseBody);
     }
 
     private async Task PostGamesSyncCompleteAsync(string syncRunId, IReadOnlyList<string> playniteIds)
