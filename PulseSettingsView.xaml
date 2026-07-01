@@ -26,9 +26,6 @@
                      IsChecked="{Binding IsSuccessStorySelected}"/>
 
         <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#CC8800"
-                   Visibility="{Binding ShowAchievementSourceNotInstalledWarning, Converter={StaticResource BoolToVisibility}}"
-                   Text="The selected achievement source was not detected. Make sure the plugin is installed and has synced at least once, then run a full sync."/>
-        <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#CC8800"
                    Visibility="{Binding ShowAchievementSourceChangedWarning, Converter={StaticResource BoolToVisibility}}"
                    Text="Achievement source changed. Run PlayLog: Sync all games from the main menu to update all your games."/>
 

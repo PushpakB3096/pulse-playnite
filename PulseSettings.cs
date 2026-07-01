@@ -113,23 +113,6 @@ namespace Pulse
                 editingClone.AchievementSourcePreference,
                 StringComparison.Ordinal);
 
-        /// <summary>True when the currently selected achievement source plugin is detected on disk.</summary>
-        public bool IsSelectedAchievementSourceInstalled
-        {
-            get
-            {
-                var extensionsDataPath = plugin.GetExtensionsDataPath();
-                if (string.IsNullOrEmpty(extensionsDataPath))
-                    return true;
-                return AchievementExtensionGameDataReader.IsSourceInstalled(
-                    extensionsDataPath,
-                    Settings?.AchievementSourcePreference);
-            }
-        }
-
-        /// <summary>True when the selected achievement source is NOT installed (drives warning visibility).</summary>
-        public bool ShowAchievementSourceNotInstalledWarning => !IsSelectedAchievementSourceInstalled;
-
         public bool SyncPlayniteCoversEnabled => syncPlayniteCoversEnabled;
 
         public int CoverUploadPendingCount =>
@@ -181,7 +164,6 @@ namespace Pulse
                 OnPropertyChanged(nameof(IsPlayniteAchievementsSelected));
                 OnPropertyChanged(nameof(IsSuccessStorySelected));
                 OnPropertyChanged(nameof(ShowAchievementSourceChangedWarning));
-                OnPropertyChanged(nameof(IsSelectedAchievementSourceInstalled));
             }
         }
 
@@ -274,6 +256,7 @@ namespace Pulse
             {
                 Settings = new PulseSettings();
             }
+
         }
 
         public void BeginEdit()
@@ -281,8 +264,6 @@ namespace Pulse
             // Code executed when settings view is opened and user starts editing values.
             editingClone = Serialization.GetClone(Settings);
             OnPropertyChanged(nameof(ShowAchievementSourceChangedWarning));
-            OnPropertyChanged(nameof(IsSelectedAchievementSourceInstalled));
-            OnPropertyChanged(nameof(ShowAchievementSourceNotInstalledWarning));
             _ = RefreshCoverSyncStatusAsync();
             StartCoverStatusTimer();
         }

@@ -925,8 +925,6 @@ namespace Pulse
             return await client.GetSyncPlayniteCoversAsync(forceRefresh).ConfigureAwait(false);
         }
 
-        internal string GetExtensionsDataPath() =>
-            PlayniteApi?.Paths?.ExtensionsDataPath ?? string.Empty;
 
         public override ISettings GetSettings(bool firstRunSettings)
         {
