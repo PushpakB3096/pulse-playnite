@@ -20,6 +20,7 @@ internal sealed class AchievementSyncBatchCounters
     public int SkippedJsonParseError;
     public int SkippedDbReadError;
     public int SkippedDbNoGame;
+    public bool LoggedPaDbPath;
     public string SampleMissingFilePath;
 
     public void LogBatchSummary(ILogger log, int gamesInPayload, string extensionsDataPath)
@@ -216,6 +217,14 @@ internal static class AchievementExtensionGameDataReader
         AchievementSyncBatchCounters batchCounters)
     {
         var dbPath = AchievementExtensionPaths.GetPlayniteAchievementsCacheDbPath(extensionsDataPath);
+
+        if (!batchCounters.LoggedPaDbPath)
+        {
+            batchCounters.LoggedPaDbPath = true;
+            logger.Info("PlayLog achievements [PA]: checking DB at path=\"" + dbPath
+                + "\" exists=" + File.Exists(dbPath));
+        }
+
         if (!File.Exists(dbPath))
         {
             batchCounters.SkippedNoSourceInstalled++;
@@ -287,7 +296,12 @@ internal static class AchievementExtensionGameDataReader
                 using (var reader = cmd.ExecuteReader())
                 {
                     if (!reader.Read())
+                    {
+                        logger.Info("PlayLog achievements [PA]: game found (gameRowId=" + gameRowId
+                            + ", playniteId=" + playniteGameIdStr
+                            + ") but no UserGameProgress row with IsCurrentUser=1 — PA may not have scanned this game yet or user row missing.");
                         return null;
+                    }
                     progressRowId = reader.GetInt64(0);
                     achievementsUnlocked = reader.IsDBNull(1) ? 0L : reader.GetInt64(1);
                     totalAchievements = reader.IsDBNull(2) ? 0L : reader.GetInt64(2);
