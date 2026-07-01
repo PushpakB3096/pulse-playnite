@@ -643,12 +643,10 @@ namespace Pulse
                         progress.BatchRangeEnd,
                         progress.GamesTotal);
                     break;
-                case LibrarySyncPhase.UploadingBatch:
+                case LibrarySyncPhase.SyncingLibrary:
                     args.Text = string.Format(
                         CultureInfo.InvariantCulture,
-                        "PlayLog: Uploading batch {0} of {1} ({2}/{3})…",
-                        progress.BatchIndex,
-                        progress.BatchCount,
+                        "PlayLog: Syncing library ({0}/{1})…",
                         progress.GamesDone,
                         progress.GamesTotal);
                     break;
