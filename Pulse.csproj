@@ -43,6 +43,10 @@
     <Reference Include="PresentationFramework" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Data.SQLite, Version=2.0.3.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=MSIL">
+      <HintPath>packages\System.Data.SQLite.2.0.3\lib\net471\System.Data.SQLite.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Transactions" />
     <Reference Include="System.Xaml" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
@@ -54,9 +58,6 @@
     <!-- SQLite for reading PlayniteAchievements achievement_cache.db.
          Run 'nuget restore' to download the package.
          The native SQLite.Interop.dll (x64) must also be bundled with the extension package. -->
-    <Reference Include="System.Data.SQLite">
-      <HintPath>packages\System.Data.SQLite.1.0.118.0\lib\net46\System.Data.SQLite.dll</HintPath>
-    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DeterministicSessionGuid.cs" />
