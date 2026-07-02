@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Data.SQLite;
 using System.Globalization;
 using System.IO;
+using Microsoft.Data.Sqlite;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Playnite.SDK;
@@ -77,6 +77,11 @@ internal sealed class AchievementSyncBatchCounters
 internal static class AchievementExtensionGameDataReader
 {
     private static readonly ILogger logger = LogManager.GetLogger();
+
+    static AchievementExtensionGameDataReader()
+    {
+        SQLitePCL.Batteries_V2.Init();
+    }
 
     /// <summary>
     /// Returns true when the given source key's plugin data can be found on disk.
@@ -261,9 +266,9 @@ internal static class AchievementExtensionGameDataReader
     /// </summary>
     private static JObject QueryPlayniteAchievementsDb(string dbPath, string playniteGameIdStr)
     {
-        var connectionString = "Data Source=" + dbPath + ";Version=3;Read Only=True;";
+        var connectionString = "Data Source=" + dbPath + ";Mode=ReadOnly";
 
-        using (var connection = new SQLiteConnection(connectionString))
+        using (var connection = new SqliteConnection(connectionString))
         {
             connection.Open();
 
@@ -274,7 +279,7 @@ internal static class AchievementExtensionGameDataReader
                 cmd.CommandText = "SELECT Id FROM Games WHERE PlayniteGameId = @gid LIMIT 1";
                 cmd.Parameters.AddWithValue("@gid", playniteGameIdStr);
                 var result = cmd.ExecuteScalar();
-                if (result == null || result == DBNull.Value)
+                if (result == null || result is DBNull)
                     return null;
                 gameRowId = Convert.ToInt64(result, CultureInfo.InvariantCulture);
             }
