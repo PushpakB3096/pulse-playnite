@@ -47,13 +47,13 @@
       <HintPath>packages\Microsoft.Data.Sqlite.Core.8.0.15\lib\netstandard2.0\Microsoft.Data.Sqlite.dll</HintPath>
     </Reference>
     <Reference Include="SQLitePCLRaw.core">
-      <HintPath>packages\SQLitePCLRaw.core.2.1.10\lib\netstandard2.0\SQLitePCLRaw.core.dll</HintPath>
+      <HintPath>packages\SQLitePCLRaw.core.2.1.6\lib\netstandard2.0\SQLitePCLRaw.core.dll</HintPath>
     </Reference>
     <Reference Include="SQLitePCLRaw.provider.winsqlite3">
-      <HintPath>packages\SQLitePCLRaw.bundle_winsqlite3.2.1.10\lib\netstandard2.0\SQLitePCLRaw.provider.winsqlite3.dll</HintPath>
+      <HintPath>packages\SQLitePCLRaw.bundle_winsqlite3.2.1.6\lib\netstandard2.0\SQLitePCLRaw.provider.winsqlite3.dll</HintPath>
     </Reference>
     <Reference Include="SQLitePCLRaw.batteries_v2">
-      <HintPath>packages\SQLitePCLRaw.bundle_winsqlite3.2.1.10\lib\netstandard2.0\SQLitePCLRaw.batteries_v2.dll</HintPath>
+      <HintPath>packages\SQLitePCLRaw.bundle_winsqlite3.2.1.6\lib\netstandard2.0\SQLitePCLRaw.batteries_v2.dll</HintPath>
     </Reference>
     <Reference Include="System.Transactions" />
     <Reference Include="System.Xaml" />
