@@ -8,7 +8,8 @@ internal static class AchievementExtensionPaths
 
     public const string SuccessStoryGameDataSubfolder = "SuccessStory";
 
-    public const string PlayniteAchievementsAddonFolderName = "PlayniteAchievements";
+    public static readonly Guid PlayniteAchievementsPluginId =
+        Guid.Parse("e6aad2c9-6e06-4d8d-ac55-ac3b252b5f7b");
 
     public const string PlayniteAchievementsCacheDbFileName = "achievement_cache.db";
 
@@ -27,7 +28,7 @@ internal static class AchievementExtensionPaths
 
     public static string GetPlayniteAchievementsPluginUserDataPath(string extensionsDataPath)
     {
-        return Path.Combine(extensionsDataPath, PlayniteAchievementsAddonFolderName);
+        return Path.Combine(extensionsDataPath, PlayniteAchievementsPluginId.ToString());
     }
 
     public static string GetPlayniteAchievementsCacheDbPath(string extensionsDataPath)

@@ -43,6 +43,19 @@
     <Reference Include="PresentationFramework" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="Microsoft.Data.Sqlite">
+      <HintPath>packages\Microsoft.Data.Sqlite.Core.8.0.15\lib\netstandard2.0\Microsoft.Data.Sqlite.dll</HintPath>
+    </Reference>
+    <Reference Include="SQLitePCLRaw.core">
+      <HintPath>packages\SQLitePCLRaw.core.2.1.6\lib\netstandard2.0\SQLitePCLRaw.core.dll</HintPath>
+    </Reference>
+    <Reference Include="SQLitePCLRaw.provider.winsqlite3">
+      <HintPath>packages\SQLitePCLRaw.bundle_winsqlite3.2.1.6\lib\netstandard2.0\SQLitePCLRaw.provider.winsqlite3.dll</HintPath>
+    </Reference>
+    <Reference Include="SQLitePCLRaw.batteries_v2">
+      <HintPath>packages\SQLitePCLRaw.bundle_winsqlite3.2.1.6\lib\netstandard2.0\SQLitePCLRaw.batteries_v2.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Transactions" />
     <Reference Include="System.Xaml" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
@@ -51,6 +64,9 @@
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Xml" />
     <Reference Include="WindowsBase" />
+    <!-- SQLite for reading PlayniteAchievements achievement_cache.db.
+         Uses winsqlite3.dll (Windows built-in, available on all Win10+ machines).
+         No native DLL needs to be deployed alongside the extension. -->
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DeterministicSessionGuid.cs" />
