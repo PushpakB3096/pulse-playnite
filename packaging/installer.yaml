@@ -1,5 +1,11 @@
 AddonId: Pulse_d1ac11bf-1668-455f-ad91-6fdb334a54c5
 Packages:
+  - Version: 1.4.1
+    RequiredApiVersion: 6.2.0
+    ReleaseDate: 2026-07-07
+    PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.4.1/PlayLog-v1.4.1.pext
+    Changelog:
+      - Fix full library sync failing with "a task was canceled" for large libraries with achievement data.
   - Version: 1.4.0
     RequiredApiVersion: 6.2.0
     ReleaseDate: 2026-07-02

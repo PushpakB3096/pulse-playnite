@@ -38,7 +38,12 @@ public partial class PulseAccountClient
 
     private const string BASE_URL = "https://pulse-server-m2u1.onrender.com";
 
-    private static readonly HttpClient http = new HttpClient();
+    private const int LibrarySyncHttpTimeoutMinutes = 10;
+
+    private static readonly HttpClient http = new HttpClient
+    {
+        Timeout = TimeSpan.FromMinutes(LibrarySyncHttpTimeoutMinutes)
+    };
 
     private const int GamesSyncBatchSize = 300;
     private const int MaxParallelSyncBatches = 5;
@@ -478,6 +483,15 @@ public partial class PulseAccountClient
         {
             resp = await http.SendAsync(httpReq).ConfigureAwait(false);
         }
+        catch (TaskCanceledException ex)
+        {
+            logger.Error(
+                ex,
+                "PlayLog: HTTP request to games/sync timed out or was canceled (client timeout is "
+                    + LibrarySyncHttpTimeoutMinutes
+                    + " minutes).");
+            throw;
+        }
         catch (Exception ex)
         {
             logger.Error(ex, "PlayLog: HTTP request to games/sync failed.");
@@ -519,6 +533,15 @@ public partial class PulseAccountClient
         try
         {
             resp = await http.SendAsync(httpReq).ConfigureAwait(false);
+        }
+        catch (TaskCanceledException ex)
+        {
+            logger.Error(
+                ex,
+                "PlayLog: HTTP request to games/sync/complete timed out or was canceled (client timeout is "
+                    + LibrarySyncHttpTimeoutMinutes
+                    + " minutes).");
+            throw;
         }
         catch (Exception ex)
         {
