@@ -687,7 +687,22 @@ namespace Pulse
 
             var syncPlayniteCovers = client.GetSyncPlayniteCoversAsync().GetAwaiter().GetResult();
             client.SetIncludePlayniteCoversInSync(syncPlayniteCovers);
-            return client.SyncGamesAsync(gameList, fullLibrarySync, onProgress).GetAwaiter().GetResult();
+
+            IReadOnlyList<string> coversNeedingUpload;
+            if (gameList.Count == 0)
+            {
+                coversNeedingUpload = new string[0];
+            }
+            else
+            {
+                coversNeedingUpload = client
+                    .SyncGamesAsync(gameList, fullLibrarySync, onProgress)
+                    .GetAwaiter()
+                    .GetResult();
+            }
+
+            client.SyncFilterPresetsAsync().GetAwaiter().GetResult();
+            return coversNeedingUpload;
         }
 
         private void FinishLibrarySyncWithCoverUpload(IReadOnlyList<string> coversNeedingUpload)

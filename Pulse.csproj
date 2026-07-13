@@ -81,6 +81,7 @@
     <Compile Include="CoverUploadQueue.cs" />
     <Compile Include="PlayniteCoverReader.cs" />
     <Compile Include="PulseAccountClient.Covers.cs" />
+    <Compile Include="PulseAccountClient.FilterPresets.cs" />
     <Compile Include="PulseAccountClient.StatusPush.cs" />
     <Compile Include="Pulse.cs" />
     <Compile Include="PulseAccountClient.cs" />
