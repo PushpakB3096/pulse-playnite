@@ -12,7 +12,7 @@ import yaml
 def main() -> None:
     addon_id = os.environ["ADDON_ID"]
     version = os.environ["VERSION"].strip()
-    api = os.environ.get("REQUIRED_API_VERSION", "6.2.0").strip()
+    api = os.environ.get("REQUIRED_API_VERSION", "6.13.0").strip()
     release_date = os.environ["RELEASE_DATE"].strip()
     package_url = os.environ["PACKAGE_URL"].strip()
     changelog = os.environ.get("CHANGELOG", "").strip()

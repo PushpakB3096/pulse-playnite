@@ -153,7 +153,7 @@ jobs:
           $yaml = "AddonId: Pulse_d1ac11bf-1668-455f-ad91-6fdb334a54c5$nl" +
             "Packages:$nl" +
             "  - Version: $ver$nl" +
-            "    RequiredApiVersion: 6.2.0$nl" +
+            "    RequiredApiVersion: 6.13.0$nl" +
             "    ReleaseDate: $today$nl" +
             "    PackageUrl: $pkgUrl$nl" +
             "    Changelog:$nl" +
@@ -203,7 +203,7 @@ jobs:
           ADDON_ID: Pulse_d1ac11bf-1668-455f-ad91-6fdb334a54c5
           GITHUB_REF_NAME: ${{ needs.windows.outputs.release_tag }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          REQUIRED_API_VERSION: "6.2.0"
+          REQUIRED_API_VERSION: "6.13.0"
         run: |
           set -euo pipefail
           BRANCH="master"
