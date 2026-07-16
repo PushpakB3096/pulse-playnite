@@ -1,4 +1,4 @@
-# Branch/PR CI + optional manual pack (no GitHub Release). Tag releases use playnite-extension-release.yml.
+# Branch/PR compile-only CI. Pushes to master also run playnite-extension-release.yml (pack + draft release).
 name: Playnite extension (CI)
 
 on:
@@ -6,13 +6,6 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
-  workflow_dispatch:
-    inputs:
-      full_release:
-        description: "Install Playnite and pack .pext only (no GitHub Release; use a v* tag for full release)"
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: write
@@ -42,49 +35,6 @@ jobs:
       - name: MSBuild (Release)
         run: msbuild Pulse.sln /restore:false /p:Configuration=Release /p:Platform="Any CPU" /verbosity:minimal
 
-      - name: CI only — no Playnite Toolbox here
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.full_release != true }}
+      - name: CI only — compile check
         run: |
-          echo "::notice title=This run is compile-only CI::Playnite install, Toolbox pack, GitHub Release, and verify run in the separate workflow 'Playnite extension (release)' when you push a v* tag (or run that workflow manually). This job is from push/PR to master — not a tag build."
-
-      - name: Install Playnite (Toolbox)
-        id: playnite
-        if: github.event_name == 'workflow_dispatch' && inputs.full_release == true
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/JosefNemec/Playnite/releases/latest" -Headers @{ "User-Agent" = "pulse-playnite-ci" }
-          $asset = $rel.assets | Where-Object { $_.name -match '^Playnite\d+\.exe$' } | Select-Object -First 1
-          if (-not $asset) { throw "No Playnite*.exe asset in latest Playnite release." }
-          Write-Host "Downloading $($asset.name)"
-          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "Playnite_setup.exe"
-          $p = Start-Process -FilePath ".\Playnite_setup.exe" -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART") -PassThru -Wait
-          if ($p.ExitCode -ne 0) { Write-Warning "Installer exit code $($p.ExitCode)" }
-          Get-Process -Name "Playnite*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 2
-          $candidates = @(
-            (Join-Path $env:ProgramFiles "Playnite\Toolbox.exe"),
-            (Join-Path ${env:ProgramFiles(x86)} "Playnite\Toolbox.exe"),
-            (Join-Path $env:LOCALAPPDATA "Playnite\Toolbox.exe")
-          )
-          $toolbox = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $toolbox) {
-            $found = Get-ChildItem -Path $env:ProgramFiles, $env:LOCALAPPDATA -Recurse -Filter "Toolbox.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($found) { $toolbox = $found.FullName }
-          }
-          if (-not $toolbox -or -not (Test-Path $toolbox)) { throw "Toolbox.exe not found after Playnite install." }
-          Write-Host "Toolbox=$toolbox"
-          "toolbox_path=$toolbox" >> $env:GITHUB_OUTPUT
-
-      - name: Pack .pext (manual only)
-        if: github.event_name == 'workflow_dispatch' && inputs.full_release == true
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $Toolbox = "${{ steps.playnite.outputs.toolbox_path }}"
-          $built = Join-Path $PWD "bin\Release"
-          if (-not (Test-Path $built)) { throw "Release output not found: $built" }
-          $out = Join-Path $PWD "_pext"
-          New-Item -ItemType Directory -Force -Path $out | Out-Null
-          & $Toolbox pack $built $out
-          Get-ChildItem $out
+          echo "::notice title=Compile-only CI::On push to master, the separate workflow 'Playnite extension (release)' builds the .pext and creates a draft GitHub Release from extension.yaml Version."
