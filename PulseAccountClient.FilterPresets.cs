@@ -12,11 +12,6 @@ public partial class PulseAccountClient
 {
     private readonly string playniteFilterPresetsSyncEndpoint;
 
-    partial void InitializeFilterPresetSyncEndpoints(string baseUrlClean)
-    {
-        playniteFilterPresetsSyncEndpoint = baseUrlClean + "/api/playnite/filter-presets/sync";
-    }
-
     public async Task SyncFilterPresetsAsync()
     {
         if (!HasBearerToken())
