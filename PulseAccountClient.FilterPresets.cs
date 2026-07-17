@@ -149,6 +149,17 @@ public partial class PulseAccountClient
             resolved.Version = settings.Version.Trim();
         }
 
+        if (!string.IsNullOrWhiteSpace(settings.Name))
+        {
+            var nameFilter = settings.Name.Trim();
+            if (nameFilter.Length > 150)
+            {
+                nameFilter = nameFilter.Substring(0, 150);
+            }
+
+            resolved.Name = nameFilter;
+        }
+
         var releaseYear = ParseReleaseYear(settings.ReleaseYear);
         if (releaseYear.HasValue)
         {
@@ -172,11 +183,6 @@ public partial class PulseAccountClient
         if (HasIdItemFilter(settings.Library))
         {
             unsupportedFields.Add("library");
-        }
-
-        if (!string.IsNullOrWhiteSpace(settings.Name))
-        {
-            unsupportedFields.Add("name");
         }
 
         if (HasEnumFilter(settings.InstallSize))
@@ -329,6 +335,9 @@ public partial class PulseAccountClient
 
         [JsonProperty("version")]
         public string Version { get; set; }
+
+        [JsonProperty("name")]
+        public string Name { get; set; }
 
         [JsonProperty("releaseYear")]
         public int? ReleaseYear { get; set; }
