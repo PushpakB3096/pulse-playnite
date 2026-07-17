@@ -465,7 +465,24 @@ internal static class PulseGameInfoPushApplier
             day = (int)dayNumber;
         }
 
-        releaseDate = new ReleaseDate((int)year, month, day);
+        if (day.HasValue && !month.HasValue)
+        {
+            return false;
+        }
+
+        if (month.HasValue && day.HasValue)
+        {
+            releaseDate = new ReleaseDate((int)year, month.Value, day.Value);
+        }
+        else if (month.HasValue)
+        {
+            releaseDate = new ReleaseDate((int)year, month.Value);
+        }
+        else
+        {
+            releaseDate = new ReleaseDate((int)year);
+        }
+
         return true;
     }
 
