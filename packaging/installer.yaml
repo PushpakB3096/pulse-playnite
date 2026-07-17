@@ -5,9 +5,8 @@ Packages:
     ReleaseDate: 2026-07-17
     PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.5.0/PlayLog-v1.5.0.pext
     Changelog:
-      - Sync Playnite filter presets to PlayLog for Plus users.
+      - Sync Playnite filter presets to PlayLog
       - Apply PlayLog game info edits (playtime and related fields) back to Playnite.
-      - Sync preset Name filters so PlayLog can search by game title when a preset is applied.
   - Version: 1.4.1
     RequiredApiVersion: 6.2.0
     ReleaseDate: 2026-07-07
