@@ -156,7 +156,7 @@ jobs:
               throw "packaging/installer.yaml has no Packages entry for version $ver"
             }
 
-            $pattern = "(?ms)(  - Version: $([regex]::Escape($ver))\r?\n(?:.*?\r?\n)*?    PackageUrl: ).*"
+            $pattern = "(?m)(  - Version: $([regex]::Escape($ver))\n(?:.*?\n)*?    PackageUrl: )[^\n]*"
             $verifyManifest = [regex]::Replace($manifest, $pattern, "`${1}$pkgUrl", 1)
             $verifyPath = Join-Path $PWD "_installer-verify.yaml"
             Set-Content -Path $verifyPath -Value $verifyManifest -Encoding utf8
