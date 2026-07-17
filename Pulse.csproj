@@ -84,6 +84,7 @@
     <Compile Include="PulseAccountClient.Covers.cs" />
     <Compile Include="PulseAccountClient.FilterPresets.cs" />
     <Compile Include="PulseAccountClient.StatusPush.cs" />
+    <Compile Include="PulseGameInfoPushApplier.cs" />
     <Compile Include="Pulse.cs" />
     <Compile Include="PulseAccountClient.cs" />
     <Compile Include="SessionSyncQueue.cs" />

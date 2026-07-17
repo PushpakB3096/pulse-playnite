@@ -123,5 +123,8 @@ public partial class PulseAccountClient
 
         [JsonProperty("favorite")]
         public bool? Favorite { get; set; }
+
+        [JsonProperty("gameInfo")]
+        public Dictionary<string, object> GameInfo { get; set; }
     }
 }

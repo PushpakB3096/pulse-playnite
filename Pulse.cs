@@ -495,14 +495,17 @@ namespace Pulse
                     var statusName = row.TargetCompletionStatusName?.Trim();
                     var statusRequested = !string.IsNullOrEmpty(statusName);
                     var favoriteRequested = row.Favorite.HasValue;
+                    var gameInfoRequested =
+                        row.GameInfo != null && row.GameInfo.Count > 0;
 
-                    if (!statusRequested && !favoriteRequested)
+                    if (!statusRequested && !favoriteRequested && !gameInfoRequested)
                     {
                         continue;
                     }
 
                     var statusOk = !statusRequested;
                     var favoriteOk = !favoriteRequested;
+                    var gameInfoOk = !gameInfoRequested;
                     var rowChanged = false;
 
                     if (statusRequested)
@@ -540,13 +543,26 @@ namespace Pulse
                         }
                     }
 
+                    if (gameInfoRequested)
+                    {
+                        var gameInfoResult = PulseGameInfoPushApplier.Apply(
+                            PlayniteApi.Database,
+                            game,
+                            row.GameInfo);
+                        gameInfoOk = gameInfoResult.AllApplied;
+                        if (gameInfoResult.Changed)
+                        {
+                            rowChanged = true;
+                        }
+                    }
+
                     if (rowChanged)
                     {
                         PlayniteApi.Database.Games.Update(game);
                         MarkRecentlyPushedFromPlayLog(gameGuid);
                     }
 
-                    if (statusOk && favoriteOk)
+                    if (statusOk && favoriteOk && gameInfoOk)
                     {
                         ackPlayniteIds.Add(row.PlayniteId.Trim());
                     }
