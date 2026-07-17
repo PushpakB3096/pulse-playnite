@@ -1,70 +1,79 @@
 AddonId: Pulse_d1ac11bf-1668-455f-ad91-6fdb334a54c5
 Packages:
-  - Version: 1.5.0
-    RequiredApiVersion: 6.13.0
-    ReleaseDate: 2026-07-17
-    PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.5.0/PlayLog-v1.5.0.pext
-    Changelog:
-      - Sync Playnite filter presets to PlayLog
-      - Apply PlayLog game info edits (playtime and related fields) back to Playnite.
-  - Version: 1.4.1
-    RequiredApiVersion: 6.2.0
-    ReleaseDate: 2026-07-07
-    PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.4.1/PlayLog-v1.4.1.pext
-    Changelog:
-      - Fix full library sync failing with "a task was canceled" for large libraries with achievement data.
-  - Version: 1.4.0
-    RequiredApiVersion: 6.2.0
-    ReleaseDate: 2026-07-02
-    PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.4.0/PlayLog-v1.4.0.pext
-    Changelog:
-      - PlayniteAchievements can now be used as the achievement source alongside SuccessStory.
-      - Achievement data updates automatically after you finish playing a game, without needing a full library sync.
-      - Game sync improvements for more reliable and faster library updates.
-  - Version: 1.3.4
-    RequiredApiVersion: 6.2.0
-    ReleaseDate: 2026-06-17
-    PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.3.4/PlayLog-v1.3.4.pext
-    Changelog:
-      - Achievement progress from SuccessStory can sync with your library when that extension is installed.
-      - PlayLog sessions close more reliably when Playnite shuts down or restarts, so logged play time stays accurate.
-  - Version: 1.3.3
-    RequiredApiVersion: 6.2.0
-    ReleaseDate: 2026-06-09
-    PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.3.3/PlayLog-v1.3.3.pext
-    Changelog:
-      - Favorite changes made in the PlayLog app can update starred games in Playnite.
-  - Version: 1.3.2
-    RequiredApiVersion: 6.2.0
-    ReleaseDate: 2026-06-03
-    PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.3.2/PlayLog-v1.3.2.pext
-    Changelog:
-      - Completion status changes made in the PlayLog app can update the same game in Playnite.
-      - Library sync shows which step is running and how many games are done, instead of one fixed message.
-  - Version: 1.3.0
-    RequiredApiVersion: 6.2.0
-    ReleaseDate: 2026-05-29
-    PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.3.0/PlayLog-v1.3.0.pext
-    Changelog:
-      - PlayLog can now sync your Playnite cover art to the mobile app; uploads run in the background after library sync.
-      - Extension settings show cover upload status when your account is linked.
-  - Version: 1.2.0
-    RequiredApiVersion: 6.2.0
-    ReleaseDate: 2026-05-06
-    PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.2.0/PlayLog-v1.2.0.pext
-    Changelog:
-      - HowLongToBeat playtime info can travel with your library sync when that extension is installed; clearer behavior when a game cannot be read.
-      - Full library sync runs in steadier steps so large collections stay reliable.
-      - If PlayLog is not linked yet, the extension avoids weak sync attempts; you get a short note if you try syncing everything before finishing setup.
-  - Version: 1.1.0
-    RequiredApiVersion: 6.2.0
-    ReleaseDate: 2026-05-04
-    PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.1.0/PlayLog-v1.1.0.pext
-    Changelog:
-      - Imports past play sessions from the Game Activity extension into PlayLog when you next start Playnite (if Game Activity is installed)
-  - Version: 1.0.0
-    RequiredApiVersion: 6.2.0
-    ReleaseDate: 2026-04-20
-    PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.0.0/PlayLog-v1.0.0.pext
-    Changelog:
-      - Initial listing
+- Version: master
+  RequiredApiVersion: 6.13.0
+  ReleaseDate: '2026-07-17'
+  PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/master/PlayLog-master.pext
+  Changelog:
+  - Release master
+- Version: 1.5.0
+  RequiredApiVersion: 6.13.0
+  ReleaseDate: 2026-07-17
+  PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.5.0/PlayLog-v1.5.0.pext
+  Changelog:
+  - Sync Playnite filter presets to PlayLog
+  - Apply PlayLog game info edits (playtime and related fields) back to Playnite.
+- Version: 1.4.1
+  RequiredApiVersion: 6.2.0
+  ReleaseDate: 2026-07-07
+  PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.4.1/PlayLog-v1.4.1.pext
+  Changelog:
+  - Fix full library sync failing with "a task was canceled" for large libraries with achievement data.
+- Version: 1.4.0
+  RequiredApiVersion: 6.2.0
+  ReleaseDate: 2026-07-02
+  PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.4.0/PlayLog-v1.4.0.pext
+  Changelog:
+  - PlayniteAchievements can now be used as the achievement source alongside SuccessStory.
+  - Achievement data updates automatically after you finish playing a game, without needing a full library sync.
+  - Game sync improvements for more reliable and faster library updates.
+- Version: 1.3.4
+  RequiredApiVersion: 6.2.0
+  ReleaseDate: 2026-06-17
+  PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.3.4/PlayLog-v1.3.4.pext
+  Changelog:
+  - Achievement progress from SuccessStory can sync with your library when that extension is installed.
+  - PlayLog sessions close more reliably when Playnite shuts down or restarts, so logged play time stays accurate.
+- Version: 1.3.3
+  RequiredApiVersion: 6.2.0
+  ReleaseDate: 2026-06-09
+  PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.3.3/PlayLog-v1.3.3.pext
+  Changelog:
+  - Favorite changes made in the PlayLog app can update starred games in Playnite.
+- Version: 1.3.2
+  RequiredApiVersion: 6.2.0
+  ReleaseDate: 2026-06-03
+  PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.3.2/PlayLog-v1.3.2.pext
+  Changelog:
+  - Completion status changes made in the PlayLog app can update the same game in Playnite.
+  - Library sync shows which step is running and how many games are done, instead of one fixed message.
+- Version: 1.3.0
+  RequiredApiVersion: 6.2.0
+  ReleaseDate: 2026-05-29
+  PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.3.0/PlayLog-v1.3.0.pext
+  Changelog:
+  - PlayLog can now sync your Playnite cover art to the mobile app; uploads run in the background after library sync.
+  - Extension settings show cover upload status when your account is linked.
+- Version: 1.2.0
+  RequiredApiVersion: 6.2.0
+  ReleaseDate: 2026-05-06
+  PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.2.0/PlayLog-v1.2.0.pext
+  Changelog:
+  - HowLongToBeat playtime info can travel with your library sync when that extension is installed; clearer behavior when
+    a game cannot be read.
+  - Full library sync runs in steadier steps so large collections stay reliable.
+  - If PlayLog is not linked yet, the extension avoids weak sync attempts; you get a short note if you try syncing everything
+    before finishing setup.
+- Version: 1.1.0
+  RequiredApiVersion: 6.2.0
+  ReleaseDate: 2026-05-04
+  PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.1.0/PlayLog-v1.1.0.pext
+  Changelog:
+  - Imports past play sessions from the Game Activity extension into PlayLog when you next start Playnite (if Game Activity
+    is installed)
+- Version: 1.0.0
+  RequiredApiVersion: 6.2.0
+  ReleaseDate: 2026-04-20
+  PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/v1.0.0/PlayLog-v1.0.0.pext
+  Changelog:
+  - Initial listing
