@@ -82,9 +82,15 @@ jobs:
       - name: Setup Playnite portable (Toolbox)
         id: playnite
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ErrorActionPreference = "Stop"
-          $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/JosefNemec/Playnite/releases/latest" -Headers @{ "User-Agent" = "pulse-playnite-ci" }
+          $headers = @{
+            "User-Agent" = "pulse-playnite-ci"
+            Authorization = "Bearer $env:GH_TOKEN"
+          }
+          $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/JosefNemec/Playnite/releases/latest" -Headers $headers
           $playniteTag = $rel.tag_name
           if ([string]::IsNullOrWhiteSpace($playniteTag)) { throw "Could not resolve latest Playnite release tag." }
           $archiveName = "$playniteTag.7z"
@@ -123,6 +129,47 @@ jobs:
           "pext_path=$dest" >> $env:GITHUB_OUTPUT
           "pext_name=$destName" >> $env:GITHUB_OUTPUT
 
+      - name: Toolbox verify (installer manifest)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $Toolbox = "${{ steps.playnite.outputs.toolbox_path }}"
+          $ver = "${{ steps.version.outputs.version }}"
+          $pextPath = "${{ steps.pack.outputs.pext_path }}"
+          $pextName = "${{ steps.pack.outputs.pext_name }}"
+          if (-not (Test-Path $pextPath)) { throw "Missing packed file: $pextPath" }
+
+          $installerManifestPath = Join-Path $PWD "packaging\installer.yaml"
+          if (-not (Test-Path $installerManifestPath)) {
+            throw "Missing packaging/installer.yaml"
+          }
+
+          $pextDir = Split-Path -Parent $pextPath
+          $port = 8765
+          $server = Start-Process python -ArgumentList @("-m", "http.server", "$port", "--bind", "127.0.0.1") -WorkingDirectory $pextDir -PassThru -WindowStyle Hidden
+          Start-Sleep -Seconds 2
+          $pkgUrl = "http://127.0.0.1:$port/$pextName"
+
+          try {
+            $manifest = Get-Content -Raw -LiteralPath $installerManifestPath
+            if ($manifest -notmatch "(?m)^  - Version: $([regex]::Escape($ver))$") {
+              throw "packaging/installer.yaml has no Packages entry for version $ver"
+            }
+
+            $pattern = "(?ms)(  - Version: $([regex]::Escape($ver))\r?\n(?:.*?\r?\n)*?    PackageUrl: ).*"
+            $verifyManifest = [regex]::Replace($manifest, $pattern, "`${1}$pkgUrl", 1)
+            $verifyPath = Join-Path $PWD "_installer-verify.yaml"
+            Set-Content -Path $verifyPath -Value $verifyManifest -Encoding utf8
+            Write-Host "Verifying installer manifest with draft-local PackageUrl: $pkgUrl"
+            Get-Content $verifyPath
+            & $Toolbox verify installer $verifyPath
+          }
+          finally {
+            if ($server -and -not $server.HasExited) {
+              Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+            }
+          }
+
       - name: Create draft GitHub Release
         shell: pwsh
         env:
@@ -138,29 +185,6 @@ jobs:
           }
           gh release create $tag $pext --draft --title $tag --target "${{ github.sha }}"
           Write-Host "Created draft release $tag with ${{ steps.pack.outputs.pext_name }}"
-
-      - name: Toolbox verify (installer manifest)
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $Toolbox = "${{ steps.playnite.outputs.toolbox_path }}"
-          $tag = "${{ steps.version.outputs.tag }}"
-          $repo = "${{ github.repository }}"
-          $pkgUrl = "https://github.com/$repo/releases/download/$tag/${{ steps.pack.outputs.pext_name }}"
-          $ver = "${{ steps.version.outputs.version }}"
-          $today = Get-Date -Format "yyyy-MM-dd"
-          $nl = [Environment]::NewLine
-          $yaml = "AddonId: Pulse_d1ac11bf-1668-455f-ad91-6fdb334a54c5$nl" +
-            "Packages:$nl" +
-            "  - Version: $ver$nl" +
-            "    RequiredApiVersion: 6.13.0$nl" +
-            "    ReleaseDate: $today$nl" +
-            "    PackageUrl: $pkgUrl$nl" +
-            "    Changelog:$nl" +
-            "      - See GitHub release notes$nl"
-          Set-Content -Path "_installer-verify.yaml" -Value $yaml -Encoding utf8 -NoNewline
-          Get-Content "_installer-verify.yaml"
-          & $Toolbox verify installer (Join-Path $PWD "_installer-verify.yaml")
 
       - name: Toolbox verify (add-on manifest for store PR)
         continue-on-error: true
