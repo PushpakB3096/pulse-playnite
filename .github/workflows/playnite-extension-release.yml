@@ -151,7 +151,7 @@ jobs:
           $pkgUrl = "http://127.0.0.1:$port/$pextName"
 
           try {
-            $manifest = Get-Content -Raw -LiteralPath $installerManifestPath
+            $manifest = (Get-Content -Raw -LiteralPath $installerManifestPath) -replace "`r`n", "`n"
             if ($manifest -notmatch "(?m)^  - Version: $([regex]::Escape($ver))$") {
               throw "packaging/installer.yaml has no Packages entry for version $ver"
             }
