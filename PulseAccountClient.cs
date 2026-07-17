@@ -97,6 +97,7 @@ public partial class PulseAccountClient
         playniteStatusPendingEndpoint = baseUrlClean + "/api/games/playnite-status-pending";
         playniteStatusPendingAckEndpoint =
             baseUrlClean + "/api/games/playnite-status-pending/ack";
+        playniteFilterPresetsSyncEndpoint = baseUrlClean + "/api/playnite/filter-presets/sync";
     }
 
     private void ApplyBearer(HttpRequestMessage req)

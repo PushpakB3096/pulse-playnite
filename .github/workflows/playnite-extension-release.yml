@@ -1,53 +1,71 @@
-# Full release pipeline (Playnite install, pack, GitHub Release, verify). Not the same as playnite-extension.yml (CI).
+# Builds a .pext and creates a draft GitHub Release on every push to master.
+# Version is read from extension.yaml (e.g. 1.4.1 -> tag v1.4.1). Fails if that tag/release already exists.
 name: Playnite extension (release)
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [master]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Tag to build (e.g. v1.0.0). Use if you need to re-run release without pushing the tag again."
-        required: true
-        default: "v1.0.0"
-        type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: playnite-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  group: playnite-release-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   windows:
     runs-on: windows-latest
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')
     outputs:
-      release_tag: ${{ steps.release_tag.outputs.name }}
+      release_tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
-      - name: Checkout (tag ref — required for Playnite pack)
+      - name: Checkout master
         uses: actions/checkout@v4
         with:
-          # Tag push: github.ref is refs/tags/vX.Y.Z. Manual run: checkout the tag you type.
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          ref: master
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Resolve release tag name (ref_name is wrong for workflow_dispatch)
-        id: release_tag
+      - name: Read extension version
+        id: version
         shell: pwsh
         run: |
-          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
-            $t = '${{ inputs.tag }}'
-          } else {
-            $t = '${{ github.ref_name }}'
+          $ErrorActionPreference = "Stop"
+          $yaml = Get-Content -LiteralPath "extension.yaml" -Raw
+          if ($yaml -notmatch '(?m)^Version:\s*(.+)$') {
+            throw "Could not read Version from extension.yaml"
           }
-          if ([string]::IsNullOrWhiteSpace($t)) { throw 'Empty release tag name' }
-          "name=$t" >> $env:GITHUB_OUTPUT
-          Write-Host "Using release tag: $t"
+          $version = $Matches[1].Trim()
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "extension.yaml Version is empty"
+          }
+          $tag = "v$version"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          Write-Host "Extension version: $version (release tag: $tag)"
+
+      - name: Fail if release or tag already exists
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = "${{ steps.version.outputs.tag }}"
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            throw "Release $tag already exists. Bump Version in extension.yaml before merging to master."
+          }
+          git fetch --tags --force
+          $existingTag = git tag -l $tag
+          if ($existingTag) {
+            throw "Git tag $tag already exists. Bump Version in extension.yaml before merging to master."
+          }
+          Write-Host "No existing release or tag for $tag."
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
@@ -61,54 +79,28 @@ jobs:
       - name: MSBuild (Release)
         run: msbuild Pulse.sln /restore:false /p:Configuration=Release /p:Platform="Any CPU" /verbosity:minimal
 
-      - name: Install Playnite (Toolbox)
+      - name: Setup Playnite portable (Toolbox)
         id: playnite
-        timeout-minutes: 25
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/JosefNemec/Playnite/releases/latest" -Headers @{ "User-Agent" = "pulse-playnite-ci" }
-          $asset = $rel.assets | Where-Object { $_.name -match '^Playnite\d+\.exe$' } | Select-Object -First 1
-          if (-not $asset) { throw "No Playnite*.exe asset in latest Playnite release." }
-          Write-Host "Downloading $($asset.name)"
-          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "Playnite_setup.exe" -TimeoutSec 900
-          $logPath = Join-Path $PWD "playnite-install.log"
-          $installArgs = @(
-            "/VERYSILENT",
-            "/SUPPRESSMSGBOXES",
-            "/NORESTART",
-            "/SP-",
-            "/CLOSEAPPLICATIONS",
-            "/LOG=$logPath"
-          )
-          Write-Host "Running Playnite installer (silent); log: $logPath"
-          $p = Start-Process -FilePath ".\Playnite_setup.exe" -ArgumentList $installArgs -PassThru -Wait
-          if ($null -ne $p.ExitCode -and $p.ExitCode -ne 0) {
-            Write-Warning "Installer exit code $($p.ExitCode)"
-          }
-          Get-Process -Name "Playnite*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 2
-          $candidates = @(
-            (Join-Path $env:ProgramFiles "Playnite\Toolbox.exe"),
-            (Join-Path ${env:ProgramFiles(x86)} "Playnite\Toolbox.exe"),
-            (Join-Path $env:LOCALAPPDATA "Playnite\Toolbox.exe")
-          )
-          $toolbox = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $toolbox) {
-            $found = Get-ChildItem -Path $env:ProgramFiles, $env:LOCALAPPDATA -Recurse -Filter "Toolbox.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($found) { $toolbox = $found.FullName }
-          }
-          if (-not $toolbox -or -not (Test-Path $toolbox)) { throw "Toolbox.exe not found after Playnite install." }
-          Write-Host "Toolbox=$toolbox"
-          "toolbox_path=$toolbox" >> $env:GITHUB_OUTPUT
-
-      - name: Upload Playnite install log on failure
-        if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playnite-install-log
-          path: playnite-install.log
-          if-no-files-found: ignore
+          $playniteTag = $rel.tag_name
+          if ([string]::IsNullOrWhiteSpace($playniteTag)) { throw "Could not resolve latest Playnite release tag." }
+          $archiveName = "$playniteTag.7z"
+          $downloadUrl = "https://github.com/JosefNemec/Playnite/releases/download/$playniteTag/$archiveName"
+          $playniteDir = Join-Path $PWD "_playnite"
+          New-Item -ItemType Directory -Force -Path $playniteDir | Out-Null
+          $archivePath = Join-Path $playniteDir $archiveName
+          Write-Host "Downloading Playnite portable $playniteTag"
+          Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -TimeoutSec 900
+          $sevenZip = "C:\Program Files\7-Zip\7z.exe"
+          if (-not (Test-Path $sevenZip)) { throw "7-Zip not found at $sevenZip" }
+          & $sevenZip x $archivePath "-o$playniteDir" -y | Out-Host
+          $toolbox = Get-ChildItem -Path $playniteDir -Recurse -Filter "Toolbox.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $toolbox) { throw "Toolbox.exe not found after extracting Playnite portable." }
+          Write-Host "Toolbox=$($toolbox.FullName)"
+          "toolbox_path=$($toolbox.FullName)" >> $env:GITHUB_OUTPUT
 
       - name: Pack .pext
         id: pack
@@ -123,8 +115,7 @@ jobs:
           & $Toolbox pack $built $out
           $pext = Get-ChildItem -Path $out -Filter "*.pext" | Select-Object -First 1
           if (-not $pext) { throw "Toolbox did not produce a .pext in $out" }
-          $tagName = "${{ steps.release_tag.outputs.name }}"
-          if ([string]::IsNullOrWhiteSpace($tagName)) { $tagName = "v0.0.0" }
+          $tagName = "${{ steps.version.outputs.tag }}"
           $destName = "PlayLog-$tagName.pext"
           $dest = Join-Path $out $destName
           Copy-Item -LiteralPath $pext.FullName -Destination $dest -Force
@@ -132,37 +123,37 @@ jobs:
           "pext_path=$dest" >> $env:GITHUB_OUTPUT
           "pext_name=$destName" >> $env:GITHUB_OUTPUT
 
-      - name: Create or update GitHub Release
+      - name: Create draft GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ErrorActionPreference = "Stop"
           $pext = "${{ steps.pack.outputs.pext_path }}"
-          $tag = "${{ steps.release_tag.outputs.name }}"
+          $tag = "${{ steps.version.outputs.tag }}"
           if (-not (Test-Path $pext)) { throw "Missing packed file: $pext" }
           gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag $pext --clobber
-          } else {
-            gh release create $tag $pext --generate-notes --title $tag
+            throw "Release $tag already exists (race or duplicate run)."
           }
+          gh release create $tag $pext --draft --title $tag --target "${{ github.sha }}"
+          Write-Host "Created draft release $tag with ${{ steps.pack.outputs.pext_name }}"
 
       - name: Toolbox verify (installer manifest)
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $Toolbox = "${{ steps.playnite.outputs.toolbox_path }}"
-          $tag = "${{ steps.release_tag.outputs.name }}"
+          $tag = "${{ steps.version.outputs.tag }}"
           $repo = "${{ github.repository }}"
           $pkgUrl = "https://github.com/$repo/releases/download/$tag/${{ steps.pack.outputs.pext_name }}"
-          $ver = $tag.TrimStart("v")
+          $ver = "${{ steps.version.outputs.version }}"
           $today = Get-Date -Format "yyyy-MM-dd"
           $nl = [Environment]::NewLine
           $yaml = "AddonId: Pulse_d1ac11bf-1668-455f-ad91-6fdb334a54c5$nl" +
             "Packages:$nl" +
             "  - Version: $ver$nl" +
-            "    RequiredApiVersion: 6.2.0$nl" +
+            "    RequiredApiVersion: 6.13.0$nl" +
             "    ReleaseDate: $today$nl" +
             "    PackageUrl: $pkgUrl$nl" +
             "    Changelog:$nl" +
@@ -189,13 +180,13 @@ jobs:
 
   update-installer-yaml:
     needs: windows
-    if: success() && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
+    if: success()
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout default branch
+      - name: Checkout master
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.repository.default_branch || 'master' }}
+          ref: master
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
@@ -212,11 +203,10 @@ jobs:
           ADDON_ID: Pulse_d1ac11bf-1668-455f-ad91-6fdb334a54c5
           GITHUB_REF_NAME: ${{ needs.windows.outputs.release_tag }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          REQUIRED_API_VERSION: "6.2.0"
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch || 'master' }}
+          REQUIRED_API_VERSION: "6.13.0"
         run: |
           set -euo pipefail
-          BRANCH="${DEFAULT_BRANCH}"
+          BRANCH="master"
           git pull origin "$BRANCH" --ff-only
           VERSION="${GITHUB_REF_NAME#v}"
           TAG="$GITHUB_REF_NAME"
