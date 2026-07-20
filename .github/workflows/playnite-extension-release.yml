@@ -225,15 +225,16 @@ jobs:
       - name: Merge release into packaging/installer.yaml and push
         env:
           ADDON_ID: Pulse_d1ac11bf-1668-455f-ad91-6fdb334a54c5
-          GITHUB_REF_NAME: ${{ needs.windows.outputs.release_tag }}
+          RELEASE_TAG: ${{ needs.windows.outputs.release_tag }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           REQUIRED_API_VERSION: "6.13.0"
         run: |
           set -euo pipefail
           BRANCH="master"
           git pull origin "$BRANCH" --ff-only
-          VERSION="${GITHUB_REF_NAME#v}"
-          TAG="$GITHUB_REF_NAME"
+          # Do not use GITHUB_REF_NAME here — GitHub Actions does not allow overriding it (stays the branch name).
+          VERSION="${RELEASE_TAG#v}"
+          TAG="$RELEASE_TAG"
           PKG_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/PlayLog-${TAG}.pext"
           RELEASE_DATE=$(date -u +%Y-%m-%d)
           export VERSION RELEASE_DATE PACKAGE_URL="$PKG_URL"
