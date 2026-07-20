@@ -1,11 +1,5 @@
 AddonId: Pulse_d1ac11bf-1668-455f-ad91-6fdb334a54c5
 Packages:
-- Version: master
-  RequiredApiVersion: 6.13.0
-  ReleaseDate: '2026-07-17'
-  PackageUrl: https://github.com/PushpakB3096/pulse-playnite/releases/download/master/PlayLog-master.pext
-  Changelog:
-  - Release master
 - Version: 1.5.0
   RequiredApiVersion: 6.13.0
   ReleaseDate: 2026-07-17
