@@ -11,21 +11,38 @@ public partial class PulseAccountClient
 {
     private bool includePlayniteCoversInSync;
     private bool? syncPlayniteCoversCache;
-    private DateTime syncPlayniteCoversCacheAtUtc = DateTime.MinValue;
-    private static readonly TimeSpan SyncPlayniteCoversCacheTtl = TimeSpan.FromMinutes(5);
+    private bool? hasActivePlayLogPlusCache;
+    private DateTime usersMeFeatureCacheAtUtc = DateTime.MinValue;
+    private static readonly TimeSpan UsersMeFeatureCacheTtl = TimeSpan.FromMinutes(5);
 
     public async Task<bool> GetSyncPlayniteCoversAsync(bool forceRefresh = false)
     {
+        await EnsureUsersMeFeatureCacheAsync(forceRefresh).ConfigureAwait(false);
+        return syncPlayniteCoversCache == true;
+    }
+
+    public async Task<bool> GetHasActivePlayLogPlusAsync(bool forceRefresh = false)
+    {
+        await EnsureUsersMeFeatureCacheAsync(forceRefresh).ConfigureAwait(false);
+        return hasActivePlayLogPlusCache == true;
+    }
+
+    private async Task EnsureUsersMeFeatureCacheAsync(bool forceRefresh)
+    {
         if (!HasBearerToken())
         {
-            return false;
+            syncPlayniteCoversCache = false;
+            hasActivePlayLogPlusCache = false;
+            usersMeFeatureCacheAtUtc = DateTime.UtcNow;
+            return;
         }
 
         if (!forceRefresh
             && syncPlayniteCoversCache.HasValue
-            && DateTime.UtcNow - syncPlayniteCoversCacheAtUtc < SyncPlayniteCoversCacheTtl)
+            && hasActivePlayLogPlusCache.HasValue
+            && DateTime.UtcNow - usersMeFeatureCacheAtUtc < UsersMeFeatureCacheTtl)
         {
-            return syncPlayniteCoversCache.Value;
+            return;
         }
 
         var req = new HttpRequestMessage(HttpMethod.Get, usersMeEndpoint);
@@ -37,24 +54,24 @@ public partial class PulseAccountClient
             var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
             {
-                logger.Info("PlayLog: /users/me failed for cover flag; treating as false.");
+                logger.Info("PlayLog: /users/me failed for account features; treating as false.");
                 syncPlayniteCoversCache = false;
-                syncPlayniteCoversCacheAtUtc = DateTime.UtcNow;
-                return false;
+                hasActivePlayLogPlusCache = false;
+                usersMeFeatureCacheAtUtc = DateTime.UtcNow;
+                return;
             }
 
             var parsed = JsonConvert.DeserializeObject<UsersMeResponse>(body);
-            var enabled = parsed?.Data?.Features?.SyncPlayniteCovers == true;
-            syncPlayniteCoversCache = enabled;
-            syncPlayniteCoversCacheAtUtc = DateTime.UtcNow;
-            return enabled;
+            syncPlayniteCoversCache = parsed?.Data?.Features?.SyncPlayniteCovers == true;
+            hasActivePlayLogPlusCache = parsed?.Data?.PremiumUserDetails?.PremiumActive == true;
+            usersMeFeatureCacheAtUtc = DateTime.UtcNow;
         }
         catch (Exception ex)
         {
-            logger.Error(ex, "PlayLog: /users/me request failed for cover flag.");
+            logger.Error(ex, "PlayLog: /users/me request failed for account features.");
             syncPlayniteCoversCache = false;
-            syncPlayniteCoversCacheAtUtc = DateTime.UtcNow;
-            return false;
+            hasActivePlayLogPlusCache = false;
+            usersMeFeatureCacheAtUtc = DateTime.UtcNow;
         }
     }
 
@@ -168,12 +185,21 @@ public partial class PulseAccountClient
     {
         [JsonProperty("features")]
         public UsersMeFeatures Features { get; set; }
+
+        [JsonProperty("premiumUserDetails")]
+        public UsersMePremiumUserDetails PremiumUserDetails { get; set; }
     }
 
     private sealed class UsersMeFeatures
     {
         [JsonProperty("syncPlayniteCovers")]
         public bool SyncPlayniteCovers { get; set; }
+    }
+
+    private sealed class UsersMePremiumUserDetails
+    {
+        [JsonProperty("premiumActive")]
+        public bool PremiumActive { get; set; }
     }
 
     private sealed class GamesSyncResponse
