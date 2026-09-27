@@ -36,7 +36,7 @@ public partial class PulseAccountClient
 {
     private static readonly ILogger logger = LogManager.GetLogger();
 
-    private const string BASE_URL = "https://pulse-server-m2u1.onrender.com";
+    private const string BASE_URL = "https://pulse-server-production-b33e.up.railway.app";
 
     private const int LibrarySyncHttpTimeoutMinutes = 10;
 

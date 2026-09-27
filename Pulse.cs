@@ -454,6 +454,11 @@ namespace Pulse
                 return;
             }
 
+            if (!client.GetHasActivePlayLogPlusAsync().GetAwaiter().GetResult())
+            {
+                return;
+            }
+
             IReadOnlyList<PulseAccountClient.PlayniteStatusPendingDto> pending;
             try
             {
@@ -718,6 +723,7 @@ namespace Pulse
             }
 
             client.SyncFilterPresetsAsync().GetAwaiter().GetResult();
+            ConfigureStatusIdlePollTimerForEntitlement();
             return coversNeedingUpload;
         }
 
@@ -910,8 +916,11 @@ namespace Pulse
 
             if (settings.IsPlayLogLinked)
             {
-                statusIdlePollTimer.Start();
-                ApplyPendingStatusUpdatesFromServerSafe();
+                ConfigureStatusIdlePollTimerForEntitlement();
+                if (statusIdlePollTimer.Enabled)
+                {
+                    ApplyPendingStatusUpdatesFromServerSafe();
+                }
             }
 
             _ = gaImporter.RunAsync();
@@ -954,6 +963,28 @@ namespace Pulse
         public async Task<bool> GetSyncPlayniteCoversAsync(bool forceRefresh = false)
         {
             return await client.GetSyncPlayniteCoversAsync(forceRefresh).ConfigureAwait(false);
+        }
+
+        private void ConfigureStatusIdlePollTimerForEntitlement()
+        {
+            if (!settings.IsPlayLogLinked)
+            {
+                statusIdlePollTimer.Stop();
+                return;
+            }
+
+            var isPlus = client.GetHasActivePlayLogPlusAsync().GetAwaiter().GetResult();
+            if (isPlus)
+            {
+                if (!statusIdlePollTimer.Enabled)
+                {
+                    statusIdlePollTimer.Start();
+                }
+            }
+            else
+            {
+                statusIdlePollTimer.Stop();
+            }
         }
 
 
