@@ -133,6 +133,7 @@ public partial class PulseAccountClient
         resolved.CompletionStatuses = ResolveIdItemNames(
             database.CompletionStatuses,
             settings.CompletionStatuses);
+        resolved.Categories = ResolveIdItemNames(database.Categories, settings.Category);
         resolved.Platforms = ResolveIdItemNames(database.Platforms, settings.Platform);
         resolved.Sources = ResolveIdItemNames(database.Sources, settings.Source);
         resolved.Genres = ResolveIdItemNames(database.Genres, settings.Genre);
@@ -175,7 +176,9 @@ public partial class PulseAccountClient
         resolved.CommunityScore = ResolveEnumInts(settings.CommunityScore);
         resolved.CriticScore = ResolveEnumInts(settings.CriticScore);
 
-        if (HasIdItemFilter(settings.Category))
+        // Playnite's "None" category (Guid.Empty) and text-only category filters have no PlayLog equivalent.
+        if (settings.Category?.Ids?.Contains(Guid.Empty) == true
+            || (HasIdItemFilter(settings.Category) && resolved.Categories.Count == 0))
         {
             unsupportedFields.Add("category");
         }
@@ -299,6 +302,9 @@ public partial class PulseAccountClient
 
         [JsonProperty("completionStatuses")]
         public List<string> CompletionStatuses { get; set; }
+
+        [JsonProperty("categories")]
+        public List<string> Categories { get; set; }
 
         [JsonProperty("platforms")]
         public List<string> Platforms { get; set; }
